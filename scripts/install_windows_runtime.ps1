@@ -58,7 +58,7 @@ function Save-Json([string]$Path, $Value) {
     try {
         [IO.File]::WriteAllText($Temporary, ($Value | ConvertTo-Json -Depth 12), (New-Object Text.UTF8Encoding($false)))
         Protect-Path $Temporary $false
-        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($Temporary, $Path, $null) }
+        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($Temporary, $Path, [System.Management.Automation.Language.NullString]::Value) }
         else { [IO.File]::Move($Temporary, $Path) }
     } finally { if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary } }
 }

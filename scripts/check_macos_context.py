@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import plistlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -20,6 +21,16 @@ def request_header(directory):
     return path
 
 
+def native_link_flags(stderr):
+    # Cargo CI often forces ANSI colors, which must not become library names.
+    plain = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", stderr)
+    link = next((line.split("native-static-libs:", 1)[1] for line in plain.splitlines()
+                 if "native-static-libs:" in line), None)
+    if link is None:
+        raise RuntimeError("rustc did not report native static link dependencies")
+    return shlex.split(link)
+
+
 def check_contexts(socket, directory, ffi_library):
     if sys.platform != "darwin":
         raise RuntimeError("App Sandbox qualification requires native macOS")
@@ -28,14 +39,12 @@ def check_contexts(socket, directory, ffi_library):
         raise RuntimeError("build the embedded static ABI alongside the daemon first")
     request_header(directory)
     # Ask rustc for the native libraries required by this target's static ABI.
-    result = subprocess.run(["cargo", "rustc", "--locked", "-p", "e2em-ffi", "--lib", "--", "--print", "native-static-libs"],
+    result = subprocess.run(["cargo", "rustc", "--color", "never", "--locked", "-p", "e2em-ffi", "--lib", "--", "--print", "native-static-libs"],
                             cwd=ROOT, text=True, capture_output=True, check=True)
-    link = next((line.split("native-static-libs:", 1)[1] for line in result.stderr.splitlines() if "native-static-libs:" in line), None)
-    if link is None:
-        raise RuntimeError("rustc did not report native static link dependencies")
+    link = native_link_flags(result.stderr)
     executable = directory / "context-probe"
     subprocess.run(["xcrun", "clang", str(ROOT / "scripts/probes/macos_context.c"), "-I", str(ROOT / "crates/e2em-ffi/include"),
-                    "-I", str(directory), str(ffi_library), *shlex.split(link), "-lsandbox", "-Wall", "-Wextra", "-Werror", "-o", str(executable)], check=True)
+                    "-I", str(directory), str(ffi_library), *link, "-lsandbox", "-Wall", "-Wextra", "-Werror", "-o", str(executable)], check=True)
     def invoke(path):
         return json.loads(subprocess.check_output([str(path), str(socket)], text=True, stderr=subprocess.PIPE, timeout=10))
     ordinary = invoke(executable)

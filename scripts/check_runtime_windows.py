@@ -17,12 +17,15 @@ from e2em import Client, E2EMError
 async def check(args):
     with tempfile.TemporaryDirectory(prefix="e2em-native-") as temporary:
         install = Path(temporary) / "user installation"
-        command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-File",
+        command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
                    str(ROOT / "scripts/install_windows_runtime.ps1"),
                    "-InstallDirectory", str(install)]
         def manage(action, *options):
-            return subprocess.run(command + ["-Action", action, *options],
-                                  check=True, capture_output=True, text=True).stdout
+            result = subprocess.run(command + ["-Action", action, *options],
+                                    capture_output=True, text=True)
+            if result.returncode:
+                raise subprocess.CalledProcessError(result.returncode, result.args, result.stdout, result.stderr)
+            return result.stdout
         def expect_failure(action, *options):
             try:
                 manage(action, *options)
@@ -144,7 +147,12 @@ def main():
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("requires native Windows; Wine cannot qualify user installation or ACLs")
-    args.output.write_text(json.dumps(asyncio.run(check(args)), indent=2) + "\n")
+    try:
+        report = asyncio.run(check(args))
+    except subprocess.CalledProcessError as error:
+        print(error.stderr, file=sys.stderr)
+        raise
+    args.output.write_text(json.dumps(report, indent=2) + "\n")
 
 
 if __name__ == "__main__":

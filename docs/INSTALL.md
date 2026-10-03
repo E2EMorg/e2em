@@ -14,7 +14,7 @@ Choose your platform under **Assets** on the newest preview release. Files start
 
 The release is an unsigned developer preview. macOS/Windows can warn about an unverified publisher; signed/notarized installers are a future release milestone. Only open an installer you obtained from this repository's release page. Check its SHA-256 against `SHA256SUMS` if needed. Checksums verify bytes, not publisher identity.
 
-Setup has three steps: **install the package**, **set up the runtime for your user**, and **enrol an app**. Installing the runtime alone does not change other applications. The preview supports apps that integrate email warnings. Application credentials stay private on your computer.
+Setup has three steps: **install the package**, **set up the runtime for your user**, and **enrol an app**. Installing the runtime alone does not change other applications. The first focus is chat apps that assess drafts before sending; the preview warns about email addresses shared in chat messages. Application credentials stay private on your computer.
 
 ## Windows
 
@@ -23,8 +23,8 @@ Setup has three steps: **install the package**, **set up the runtime for your us
 
 ```powershell
 $Package = Join-Path $env:LOCALAPPDATA 'E2EM Runtime'
-& "$Package/install_windows_runtime.ps1" -Action install -Binary "$Package/e2emd.exe" -UsePackagedBinary
-& "$Package/install_windows_runtime.ps1" -Action enrol -Principal my-app
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$Package/install_windows_runtime.ps1" -Action install -Binary "$Package/e2emd.exe" -UsePackagedBinary
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$Package/install_windows_runtime.ps1" -Action enrol -Principal my-app
 ```
 
 3. Run the foreground startup command printed by the setup tool. Leave that PowerShell window open while using your app. Ctrl+C stops the runtime. This preview does not install a Windows background service or automatically start at login.
@@ -82,7 +82,7 @@ The app credential file is `~/.config/e2em/apps/my-app.json`. The runtime proces
 
 `my-app` is the application principal used by the [SDK examples](SDK.md). Enrol another slug for each app; re-enrolling rotates its secret. SDKs read the resulting credential file from your computer. They do not obtain credentials from web pages.
 
-See [Python](../sdk/python/README.md), [Node / TypeScript](../sdk/node/README.md), or [embedded C/C++](../crates/e2em-ffi/README.md). The native service accepts personal email-warning policies only; unsupported policies fail validation.
+See [Python](../sdk/python/README.md), [Node / TypeScript](../sdk/node/README.md), or [embedded C/C++](../crates/e2em-ffi/README.md). Start with the [chat integration guide](SDK.md) and its [chat policy](../examples/chat-policy.json). The native service currently supports personal `pii.email` warning/review policies; unsupported policies fail validation.
 
 ## Upgrade or remove
 

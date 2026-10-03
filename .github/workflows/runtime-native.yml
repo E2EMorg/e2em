@@ -29,6 +29,7 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets --features runtime-service,runtime-probes -- -D warnings
       - run: cargo test --locked -p e2em-platform
       - run: cargo test --locked --workspace --features runtime-service,runtime-probes
+      - run: python -m unittest discover -s tests -p test_native_setup.py -v
       - run: python scripts/check_runtime_windows.py --binary target/debug/e2emd.exe --output e2em-windows.json
       - uses: actions/upload-artifact@v4
         with:
