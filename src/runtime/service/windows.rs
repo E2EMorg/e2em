@@ -76,6 +76,10 @@ pub async fn serve_with_models(
     models: Option<super::super::models::Manager>,
     offline: bool,
 ) -> std::io::Result<bool> {
+    // Console shutdown must be handled before the pipe becomes visible or the
+    // update supervisor receives readiness.
+    let mut console_break = tokio::signal::windows::ctrl_break()?;
+    let mut console_interrupt = tokio::signal::windows::ctrl_c()?;
     read_grants(grants_path)?;
     let mut listener = e2em_platform::create_user_pipe(pipe, true)?;
     let scheduler = Arc::new(match &models {
@@ -105,8 +109,6 @@ pub async fn serve_with_models(
             None
         }
     };
-    let mut console_break = tokio::signal::windows::ctrl_break()?;
-    let mut console_interrupt = tokio::signal::windows::ctrl_c()?;
     loop {
         tokio::select! {
             _ = model_tick.tick(), if models.is_some() && !offline => {

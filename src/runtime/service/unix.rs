@@ -74,6 +74,13 @@ pub async fn serve_with_models(
     models: Option<super::super::models::Manager>,
     offline: bool,
 ) -> std::io::Result<bool> {
+    // Install handlers before exposing the endpoint: the supervisor can request
+    // shutdown as soon as the socket exists, even before readiness is reported.
+    let mut termination =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+    let mut pressure =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined1())?;
     read_grants(grants_path)?;
     let parent = socket
         .parent()
@@ -137,11 +144,6 @@ pub async fn serve_with_models(
     let mut tasks = tokio::task::JoinSet::new();
     let mut restarting = false;
     let connections = Arc::new(Semaphore::new(32));
-    let mut termination =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
-    let mut pressure =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined1())?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let mut os_pressure = match super::pressure::Monitor::open() {
         Ok(monitor) => Some(monitor),

@@ -148,11 +148,15 @@ class RuntimeUpdate(unittest.TestCase):
         self.assertFalse(self.socket.exists(), 'orphan daemon retained its endpoint')
 
     def test_interrupt_shutdown_reaches_supervisor_and_daemon(self):
-        self.start()
-        self.wait_for(self.socket.exists)
-        self.process.send_signal(signal.SIGINT)
-        self.assertEqual(self.process.wait(timeout=15), 0)
-        self.assertFalse(self.socket.exists())
+        # Interrupt at the earliest externally visible point, rather than wait
+        # for readiness. Repeated starts exercise the endpoint/handler race.
+        for attempt in range(8):
+            with self.subTest(attempt=attempt):
+                self.start()
+                self.wait_for(self.socket.exists)
+                self.process.send_signal(signal.SIGINT)
+                self.assertEqual(self.process.wait(timeout=15), 0)
+                self.assertFalse(self.socket.exists())
 
 
 if __name__ == '__main__':
