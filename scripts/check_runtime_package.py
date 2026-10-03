@@ -32,6 +32,7 @@ def main():
     package = args.package.resolve(strict=True)
     upgrade = args.upgrade_package.resolve(strict=True)
     initial_version = json.loads(Path(str(package) + '.json').read_text(encoding="utf-8"))['version']
+    offline = json.loads(Path(str(package) + '.json').read_text(encoding="utf-8"))['model_included']
     upgrade_version = json.loads(Path(str(upgrade) + '.json').read_text(encoding="utf-8"))['version']
     if tuple(map(int, upgrade_version.split('.'))) <= tuple(map(int, initial_version.split('.'))):
         parser.error('upgrade fixture must have a newer package version')
@@ -90,6 +91,12 @@ def main():
         install(package, args.output.parent)
         run(binary, '--help')
         assert installed_version() == initial_version, 'initial package version mismatch'
+        if offline:
+            backend = binary.parent if args.format in ('pkg', 'msi') else Path('/usr/libexec/e2em')
+            run('python' if args.format == 'msi' else 'python3', Path(__file__).parent / 'check_gandalf_runtime.py',
+                '--binary', binary, '--worker', backend / ('e2em-inference.exe' if args.format == 'msi' else 'e2em-inference'),
+                '--library', backend / ('onnxruntime.dll' if args.format == 'msi' else 'libonnxruntime.dylib' if args.format == 'pkg' else 'libonnxruntime.so'),
+                '--package', payload / 'models/gandalf', '--bootstrap', '--output', working / 'migration.json')
         if args.format == 'msi':
             setup = payload / 'install_windows_runtime.ps1'
             user_config = home / 'E2EM'

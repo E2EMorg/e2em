@@ -102,7 +102,7 @@ def verify_assets(directory, version):
         raise ValueError('model export parity gate did not pass for these weights')
     for name in ['gandalf-linux.json', 'gandalf-windows.json', 'gandalf-x86_64-apple-darwin.json', 'gandalf-aarch64-apple-darwin.json']:
         report = json.loads((directory / name).read_text(encoding="utf-8"))
-        if not all(report.get(check) is True for check in ('signed_offline_provisioning','default_policy_scoring','custom_model_selection','unknown_model_recovery','token_limit_reported','tampered_descriptor_rejected')):
+        if not all(report.get(check) is True for check in ('signed_offline_provisioning','default_policy_scoring','custom_model_selection','unknown_model_recovery','token_limit_reported','tampered_descriptor_rejected','native_torch_parity')):
             raise ValueError('native model qualification did not pass')
     for name, target in updates.items():
         path = directory / name

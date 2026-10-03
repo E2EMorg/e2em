@@ -84,7 +84,7 @@ jobs:
             python3 scripts/package_runtime.py --format "$format" --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
           done
       - name: Qualify native Gandalf
-        run: python3 scripts/check_gandalf_runtime.py --binary target/x86_64-unknown-linux-musl/release/e2emd --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.so --package dist/gandalf/package --output dist/reports/gandalf-linux.json
+        run: python3 scripts/check_gandalf_runtime.py --binary target/x86_64-unknown-linux-musl/release/e2emd --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.so --package dist/gandalf/package --output dist/reports/gandalf-linux.json --reference dist/gandalf/gandalf-export-parity.json
       - name: Native Debian package lifecycle
         run: |
           mkdir -p dist/reports
@@ -153,7 +153,7 @@ jobs:
           python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/upgrade --version "$UPGRADE_VERSION" --inference-dir dist/inference
       - run: python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
       - name: Qualify native Gandalf
-        run: python scripts/check_gandalf_runtime.py --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --worker dist/inference/e2em-inference.exe --library dist/inference/onnxruntime.dll --package dist/gandalf/package --output dist/reports/gandalf-windows.json
+        run: python scripts/check_gandalf_runtime.py --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --worker dist/inference/e2em-inference.exe --library dist/inference/onnxruntime.dll --package dist/gandalf/package --output dist/reports/gandalf-windows.json --reference dist/gandalf/gandalf-export-parity.json
       - name: Native MSI lifecycle
         run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*offline*.msi --upgrade-package dist/upgrade/*.msi --output dist/reports/msi.json
       - name: Native normal MSI lifecycle
@@ -181,8 +181,10 @@ jobs:
         include:
           - runner: macos-15-intel
             target: x86_64-apple-darwin
+            ort: 1.23.2
           - runner: macos-15
             target: aarch64-apple-darwin
+            ort: 1.24.4
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -197,7 +199,7 @@ jobs:
         with:
           name: gandalf-deployment
           path: dist/gandalf
-      - run: python -m pip install onnxruntime==1.24.4
+      - run: python -m pip install onnxruntime==${{ matrix.ort }}
       - run: python -c 'import zipfile; zipfile.ZipFile("dist/gandalf/gandalf-0.0.1-package.zip").extractall("dist/gandalf/package")'
       - run: python3 -m unittest discover -s tests -p 'test_runtime_packaging.py'
       - run: cargo build --locked --release --features runtime-service --bin e2emd --target ${{ matrix.target }}
@@ -216,7 +218,7 @@ jobs:
           python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/upgrade --version "$UPGRADE_VERSION" --inference-dir dist/inference
       - run: python3 scripts/package_runtime.py --format pkg --target ${{ matrix.target }} --binary target/${{ matrix.target }}/release/e2emd --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
       - name: Qualify native Gandalf
-        run: python3 scripts/check_gandalf_runtime.py --binary target/${{ matrix.target }}/release/e2emd --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.dylib --package dist/gandalf/package --output dist/reports/gandalf-${{ matrix.target }}.json
+        run: python3 scripts/check_gandalf_runtime.py --binary target/${{ matrix.target }}/release/e2emd --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.dylib --package dist/gandalf/package --output dist/reports/gandalf-${{ matrix.target }}.json --reference dist/gandalf/gandalf-export-parity.json
       - name: Native PKG lifecycle
         run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*offline*.pkg --upgrade-package dist/upgrade/*.pkg --output "dist/reports/pkg-${{ matrix.target }}.json"
       - name: Native normal PKG lifecycle

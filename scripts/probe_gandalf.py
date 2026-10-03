@@ -117,6 +117,7 @@ def main():
         "batch_size": 8, "scoring_seconds": timings, "finite_scores": len(scores),
         "preprocessing": {"max_tokens": 512, "tail_tokens": 64, "evidence_format": "target-first"},
         "quality_evaluation": False,
+        "reference_probabilities": dict(zip(policies, scores)),
     }
     if args.onnx_output:
         import numpy as np

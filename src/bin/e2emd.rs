@@ -140,6 +140,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
+    if !args.rules_only {
+        manager.ensure_default(args.offline, !args.model_no_update && !args.no_auto_update)?;
+    }
     let mut enabled = args.auto_update && !args.no_auto_update && !args.offline;
     let config = Config {
         directory,

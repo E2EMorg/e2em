@@ -40,6 +40,15 @@ async def assess(socket, registry, report):
         assert all_rules.status == 'assessed', all_rules.value
         assert not all_rules.unevaluated, all_rules.unevaluated
         assert len(all_rules.scores) >= 38, all_rules.scores
+        reference = report.pop('_reference', None)
+        if reference:
+            catalogue = {p['id']: p['wording'] for p in json.loads((ROOT / 'src/runtime/presets.json').read_text(encoding='utf-8'))['presets']}
+            catalogue['custom-1'] = 'Keep launch dates private.'
+            expected = json.loads(Path(reference).read_text(encoding='utf-8'))['reference_probabilities']
+            errors = [abs(score - expected[catalogue[name]]) for name, score in all_rules.scores.items()]
+            assert max(errors) < 2e-5, errors
+            report['max_native_probability_error'] = max(errors)
+            report['native_torch_parity'] = True
         report['all_default_policies_seconds'] = time.perf_counter() - started
         threat = await client.assess('I will kill you tonight.', policies=['abuse.threat'], deadline_ms=30000)
         assert threat.status == 'assessed' and threat.scores['abuse.threat'] > .95, threat.value
@@ -65,9 +74,12 @@ def main():
     parser.add_argument('--library', type=Path, required=True)
     parser.add_argument('--package', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--reference', type=Path)
+    parser.add_argument('--bootstrap', action='store_true', help='exercise first start of an upgraded package with existing grants')
     args = parser.parse_args()
     package = args.package.resolve()
     report = {'platform': platform.platform(), 'architecture': platform.machine(), 'quality_evaluation': False, '_package': str(package)}
+    if args.reference: report['_reference'] = str(args.reference.resolve())
     # A short path is needed for macOS's 104-byte Unix socket limit.
     with tempfile.TemporaryDirectory(prefix='e2em-model-', dir='/tmp' if os.name == 'posix' else None) as temporary:
         root = Path(temporary); root.chmod(0o700)
@@ -83,8 +95,12 @@ def main():
         registry = {'provider': 'model-check', 'grants': [{'principal': 'probe', 'secret': secrets.token_hex(32), 'model_management': True, **owner}]}
         grants = root / 'grants.json'; grants.write_text(json.dumps(registry)); grants.chmod(0o600)
         command = [args.binary.resolve(), '--grants', grants]
-        run(*command, '--model-init', '--model-worker', args.worker.resolve(), '--model-library', args.library.resolve())
-        run(*command, '--offline', '--model-install', package, '--model-no-update')
+        if args.bootstrap:
+            (root / 'installation.json').write_text(json.dumps({'version': 1, 'packaged_binary': str(args.binary.resolve())}), encoding='utf-8')
+            report['upgrade_first_start_provisioned'] = True
+        else:
+            run(*command, '--model-init', '--model-worker', args.worker.resolve(), '--model-library', args.library.resolve())
+            run(*command, '--offline', '--model-install', package, '--model-no-update')
         report['signed_offline_provisioning'] = True
         process = subprocess.Popen([str(a) for a in [*command, '--offline', option, socket, '--idle-seconds', '1']], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
@@ -93,6 +109,7 @@ def main():
             process.terminate()
             try: process.wait(timeout=10)
             except subprocess.TimeoutExpired: process.kill(); process.wait()
+        assert json.loads(grants.read_text(encoding='utf-8')) == registry, 'provisioning changed existing grants'
         # A descriptor tamper must never replace the active verified package.
         bad = root / 'bad'; bad.mkdir(); descriptor = json.loads((package / 'model.json').read_text(encoding="utf-8")); descriptor['manifest']['license'] = 'tampered'; (bad / 'model.json').write_text(json.dumps(descriptor))
         before = (root / 'models.json').read_bytes()

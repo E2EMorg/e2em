@@ -93,7 +93,7 @@ grants and credentials. Use `--update-status` or `--update-check-now` with the
 grants path to inspect or request a check. Setup supports `--no-auto-update`
 (Windows: `-NoAutoUpdate`) for installations that should stay offline.
 
-**Upgrade:** stop the runtime, install the new package, then restart it. Private credentials and grants survive package replacement. Do not repeat the initial `install` user setup over an existing installation.
+**Upgrade:** stop the runtime, install the new package, then restart it. Private credentials and grants survive package replacement. Do not repeat the initial `install` user setup over an existing installation. When upgrading from 0.1.1, the first service start provisions Gandalf automatically and preserves app credentials. Normal installers need network access for this step; offline installers import their bundled model.
 
 **Remove:** stop the runtime first. Package removal preserves user grants by design. To erase enrolment too, run the setup tool's `uninstall` action before removing the package. Linux users should disable the service and reload systemd; Mac users should unload the LaunchAgent. Windows users should stop the foreground process before uninstalling user setup and using Add/Remove Programs.
 

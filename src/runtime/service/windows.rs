@@ -110,9 +110,8 @@ pub async fn serve_with_models(
     loop {
         tokio::select! {
             _ = model_tick.tick(), if models.is_some() && !offline => {
-                if model_task.as_ref().is_some_and(|t| t.is_finished()) {
-                    if let Some(task) = model_task.take() && let Ok(Err(error)) = task.await { eprintln!("model update deferred: {error}"); }
-                }
+                if model_task.as_ref().is_some_and(|t| t.is_finished())
+                    && let Some(task) = model_task.take() && let Ok(Err(error)) = task.await { eprintln!("model update deferred: {error}"); }
                 if model_task.is_none() && activity.idle_for(Duration::from_secs(60)) {
                     let manager = models.as_ref().unwrap().clone(); let activity = activity.clone(); let stop = model_stop.clone();
                     model_task = Some(tokio::task::spawn_blocking(move || manager.check_updates(false, &|| {

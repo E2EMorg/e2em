@@ -247,6 +247,85 @@ impl Manager {
             },
         )
     }
+    /// Migrate an existing user installation on its first start after upgrade.
+    /// Backend paths come only from the installed executable/owner setup marker.
+    pub fn ensure_default(&self, offline: bool, auto_update: bool) -> io::Result<()> {
+        if !self.path.exists() {
+            let parent = self
+                .path
+                .parent()
+                .ok_or_else(|| io::Error::other("missing model config parent"))?;
+            let marker = parent.join("installation.json");
+            let binary = if marker.exists() {
+                let value: serde_json::Value = read(&marker)?;
+                value["packaged_binary"]
+                    .as_str()
+                    .map(PathBuf::from)
+                    .unwrap_or(std::env::current_exe()?)
+            } else {
+                std::env::current_exe()?
+            };
+            if !binary.is_absolute() {
+                return Err(io::Error::other("invalid packaged executable path"));
+            }
+            let backend = binary
+                .parent()
+                .ok_or_else(|| io::Error::other("missing packaged backend"))?;
+            #[cfg(target_os = "linux")]
+            let backend = if backend == Path::new("/usr/bin") {
+                Path::new("/usr/libexec/e2em")
+            } else {
+                backend
+            };
+            let worker = backend.join(if cfg!(windows) {
+                "e2em-inference.exe"
+            } else {
+                "e2em-inference"
+            });
+            let library = backend.join(if cfg!(windows) {
+                "onnxruntime.dll"
+            } else if cfg!(target_os = "macos") {
+                "libonnxruntime.dylib"
+            } else {
+                "libonnxruntime.so"
+            });
+            self.initialize(worker, library)?;
+        }
+        let config = self.config()?;
+        if config.models.contains_key(&config.default) {
+            return Ok(());
+        }
+        if config.default != "gandalf" {
+            return Err(io::Error::other(
+                "configured default model is not installed",
+            ));
+        }
+        let backend = config
+            .worker
+            .parent()
+            .ok_or_else(|| io::Error::other("missing model backend"))?;
+        let bundled = if cfg!(windows) {
+            backend.join("models/gandalf")
+        } else {
+            backend
+                .parent()
+                .and_then(Path::parent)
+                .ok_or_else(|| io::Error::other("missing package prefix"))?
+                .join("share/e2em/models/gandalf")
+        };
+        let source = if bundled.is_dir() {
+            bundled.to_string_lossy().into_owned()
+        } else if offline {
+            return Err(io::Error::other(
+                "offline startup needs the bundled or previously provisioned model",
+            ));
+        } else {
+            "gandalf".into()
+        };
+        eprintln!("Provisioning verified Gandalf assets before runtime startup.");
+        self.install(&source, "gandalf", auto_update && !offline)?;
+        Ok(())
+    }
     pub fn config(&self) -> io::Result<Config> {
         private(&self.path, false)?;
         #[cfg(windows)]
