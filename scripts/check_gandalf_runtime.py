@@ -82,21 +82,24 @@ def main():
     if args.reference: report['_reference'] = str(args.reference.resolve())
     # A short path is needed for macOS's 104-byte Unix socket limit.
     with tempfile.TemporaryDirectory(prefix='e2em-model-', dir='/tmp' if os.name == 'posix' else None) as temporary:
-        root = Path(temporary); root.chmod(0o700)
+        root = Path(temporary)
         if os.name == 'nt':
-            sid = run('powershell.exe', '-NoProfile', '-Command', '[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value').stdout.strip()
-            # Apply the same private DACL as the installer before writing grants.
-            run('powershell.exe', '-NoProfile', '-Command', f"$p='{str(root).replace(chr(39), chr(39)*2)}'; $a=Get-Acl -LiteralPath $p; $a.SetAccessRuleProtection($true,$false); $a.SetOwner([System.Security.Principal.WindowsIdentity]::GetCurrent().User); foreach($r in @($a.Access)){{$a.RemoveAccessRuleAll($r)}}; foreach($s in @('{sid}','S-1-5-18')){{$a.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($s,'FullControl','ContainerInherit,ObjectInherit','None','Allow')))}}; Set-Acl -LiteralPath $p -AclObject $a")
+            root /= 'user'
+            setup = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ROOT / 'scripts/install_windows_runtime.ps1', '-InstallDirectory', root]
+            run(*setup, '-Action', 'install', '-Binary', args.binary.resolve(), '-UsePackagedBinary', '-RulesOnly', '-NoAutoUpdate')
+            run(*setup, '-Action', 'enrol', '-Principal', 'probe', '-ModelManagement')
+            registry = json.loads((root / 'grants.json').read_text(encoding='utf-8'))
             socket = r'\\.\pipe\e2em-' + uuid.uuid4().hex
-            owner = {'sid': sid}
             option = '--pipe'
         else:
-            socket = str(root / 'runtime.sock'); owner = {'uid': os.getuid()}; option = '--socket'
-        registry = {'provider': 'model-check', 'grants': [{'principal': 'probe', 'secret': secrets.token_hex(32), 'model_management': True, **owner}]}
-        grants = root / 'grants.json'; grants.write_text(json.dumps(registry)); grants.chmod(0o600)
+            root.chmod(0o700)
+            socket = str(root / 'runtime.sock'); option = '--socket'
+            registry = {'provider': 'model-check', 'grants': [{'principal': 'probe', 'secret': secrets.token_hex(32), 'model_management': True, 'uid': os.getuid()}]}
+            (root / 'grants.json').write_text(json.dumps(registry), encoding='utf-8'); (root / 'grants.json').chmod(0o600)
+        grants = root / 'grants.json'
         command = [args.binary.resolve(), '--grants', grants]
         if args.bootstrap:
-            (root / 'installation.json').write_text(json.dumps({'version': 1, 'packaged_binary': str(args.binary.resolve())}), encoding='utf-8')
+            if os.name != 'nt': (root / 'installation.json').write_text(json.dumps({'version': 1, 'packaged_binary': str(args.binary.resolve())}), encoding='utf-8')
             report['upgrade_first_start_provisioned'] = True
         else:
             run(*command, '--model-init', '--model-worker', args.worker.resolve(), '--model-library', args.library.resolve())
