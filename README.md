@@ -105,9 +105,9 @@ from e2em import Client, E2EMError
 
 async def main():
     credentials = json.loads(
-        (Path.home() / ".config/e2em/apps/my-app.json").read_text()
+        (Path.home() / ".config/e2em/apps/my-app.json").read_text(encoding="utf-8")
     )  # Linux / macOS; see the guide for Windows.
-    policy = json.loads(Path("examples/chat-policy.json").read_text())
+    policy = json.loads(Path("examples/chat-policy.json").read_text(encoding="utf-8"))
     client = await Client.open(**{key: credentials[key] for key in
         ("socket_path", "principal", "secret", "provider")})
     async with client:

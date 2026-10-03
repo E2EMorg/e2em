@@ -41,8 +41,8 @@ async def main():
         Path(os.environ["LOCALAPPDATA"]) / "E2EM/app-my-app.json"
         if os.name == "nt" else Path.home() / ".config/e2em/apps/my-app.json"
     )
-    config = json.loads(credential_path.read_text())
-    policy = json.loads(Path("examples/chat-policy.json").read_text())
+    config = json.loads(credential_path.read_text(encoding="utf-8"))
+    policy = json.loads(Path("examples/chat-policy.json").read_text(encoding="utf-8"))
     client = await Client.open(**{key: config[key] for key in
         ("socket_path", "principal", "secret", "provider")})
     async with client:
