@@ -1,19 +1,20 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "e2em-local"
 version = "0.1.0"
 requires-python = ">=3.11"
 description = "Local E2EM service client; no inference dependencies"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["e2em*"]
 
 [tool.setuptools.package-data]
-e2em = ["*.json"]
+e2em = ["*.json", "py.typed"]
 
 [project.urls]
 Homepage = "https://e2em.org"
