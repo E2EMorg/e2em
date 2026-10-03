@@ -1,31 +1,5 @@
 [
   {
-    "name": "undeclared-preset",
-    "policy": {
-      "schema_version": "0.1",
-      "id": "personal-basic",
-      "version": "1",
-      "profile": "personal",
-      "rules": [
-        {
-          "id": "email-warning",
-          "category": "abuse.threat",
-          "directions": [
-            "outgoing"
-          ],
-          "match": "detected",
-          "context_requirement": "target_only",
-          "action": "warn"
-        }
-      ],
-      "default_action": "allow",
-      "on_indeterminate": "review",
-      "on_error": "review",
-      "override": "user_confirm"
-    },
-    "error_code": "UNSUPPORTED_POLICY"
-  },
-  {
     "name": "platform-authority",
     "policy": {
       "schema_version": "0.1",
@@ -138,32 +112,6 @@
       "override": "user_confirm"
     },
     "error_code": "INVALID_POLICY"
-  },
-  {
-    "name": "unsupported-custom",
-    "policy": {
-      "schema_version": "0.1",
-      "id": "personal-basic",
-      "version": "1",
-      "profile": "personal",
-      "rules": [
-        {
-          "id": "email-warning",
-          "directions": [
-            "outgoing"
-          ],
-          "match": "policy_text",
-          "context_requirement": "target_only",
-          "action": "warn",
-          "policy_text": "Do not discuss a former partner."
-        }
-      ],
-      "default_action": "allow",
-      "on_indeterminate": "review",
-      "on_error": "review",
-      "override": "user_confirm"
-    },
-    "error_code": "UNSUPPORTED_POLICY"
   },
   {
     "name": "custom-block",

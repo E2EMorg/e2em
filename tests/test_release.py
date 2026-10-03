@@ -10,7 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from check_release import release_version, verify_assets
+from check_release import release_version, verify_assets, stage_assets
 from package_c_sdk import package
 
 
@@ -40,6 +40,22 @@ class ReleaseTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "missing or empty"):
                 verify_assets(Path(directory), release_version())
             self.assertFalse((Path(directory) / "SHA256SUMS").exists())
+
+    def test_native_upload_paths_flatten_without_overwriting_reports(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "downloads"
+            (source / "linux/runtime").mkdir(parents=True)
+            (source / "linux/reports").mkdir()
+            (source / "linux/runtime/installer.deb").write_bytes(b"installer")
+            (source / "linux/reports/deb.json").write_text("{}")
+            stage_assets(source, root / "release")
+            self.assertEqual({p.name for p in (root / "release").iterdir()}, {"installer.deb", "deb.json"})
+            (source / "other").mkdir()
+            (source / "other/deb.json").write_text("different report")
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                stage_assets(source, root / "rejected")
+            self.assertFalse((root / "rejected").exists())
 
     def test_c_sdk_contains_libraries_headers_and_license_and_refuses_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:

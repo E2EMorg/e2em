@@ -10,8 +10,9 @@ for a source build. The Linux C SDK uses the Ubuntu 24.04 runner baseline.
 Build with `cargo build --locked --workspace`. Include `include/e2em.h` and link
 `e2em_ffi` as a shared or static library. C and C++ examples are in `examples/`.
 ABI 1 accepts API 0.1 values; `e2em_open(1)` returns a nonzero client handle.
-Incompatible ABI versions return 0. Model installation is separate; this preview
-has only the personal email warning capability.
+Incompatible ABI versions return 0. The first focus is assessing chat messages
+before sending; this preview supports personal warnings for email addresses shared
+in those messages (`pii.email`). No model is shipped.
 
 Call `e2em_call(client, bytes, length)` with UTF-8 Call JSON, as defined by the
 runtime schema. The input is copied/deserialized during the call; the caller

@@ -172,7 +172,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "e2em-ffi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "e2em-runtime",
  "serde_json",
@@ -180,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "e2em-platform"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "tokio",
  "windows-sys",
@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "e2em-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "e2em-platform",

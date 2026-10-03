@@ -1,0 +1,109 @@
+[
+  {
+    "name": "unavailable-detector",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "abuse.threat",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "expected": {
+      "status": "indeterminate",
+      "action": "review",
+      "unevaluated_rules": [
+        "email-warning"
+      ],
+      "reason_codes": [
+        "DETECTOR_UNAVAILABLE"
+      ]
+    }
+  },
+  {
+    "name": "unavailable-custom-model",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "policy_text",
+          "context_requirement": "target_only",
+          "action": "warn",
+          "policy_text": "Do not discuss a former partner."
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "expected": {
+      "status": "indeterminate",
+      "action": "review",
+      "unevaluated_rules": [
+        "email-warning"
+      ],
+      "reason_codes": [
+        "MODEL_UNAVAILABLE"
+      ]
+    }
+  },
+  {
+    "name": "unavailable-category-model",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "abuse.threat",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "score",
+          "context_requirement": "target_only",
+          "action": "warn",
+          "review_threshold": 0.4,
+          "action_threshold": 0.7
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "expected": {
+      "status": "indeterminate",
+      "action": "review",
+      "unevaluated_rules": [
+        "email-warning"
+      ],
+      "reason_codes": [
+        "MODEL_UNAVAILABLE"
+      ]
+    }
+  }
+]

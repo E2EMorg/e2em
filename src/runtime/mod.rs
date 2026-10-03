@@ -50,13 +50,18 @@ impl<S: PolicyScorer> Engine<S> {
             api_version: API_VERSION.into(),
             provider: self.provider.clone(),
             runtime: env!("CARGO_PKG_VERSION").into(),
-            model: "none".into(),
+            model: self.scorer.model_version(),
             tokenizer: "none".into(),
             registry: "0.1.0".into(),
             languages: vec!["en".into(), "und".into()],
             detectors: vec!["pii.email".into()],
             presets: vec![],
-            custom_policies: "none".into(),
+            custom_policies: if self.scorer.supports_model_policies() {
+                "supported"
+            } else {
+                "report-only"
+            }
+            .into(),
             profiles: vec![Profile::Personal],
             actions: vec![Action::Warn, Action::Review],
             limits: Limits {
@@ -146,6 +151,7 @@ impl<S: PolicyScorer> Engine<S> {
     pub fn assess(&self, principal: &str, request: &Request) -> Assessment {
         let started = Instant::now();
         let mut result = base_result(request);
+        result.versions.model = self.scorer.model_version();
         let execute = || -> Result<Policy, ErrorCode> {
             validate_request(request)?;
             if !identifier(principal) {
@@ -190,6 +196,86 @@ impl<S: PolicyScorer> Engine<S> {
                 result.status = Status::Indeterminate;
                 result.coverage.unevaluated_rules.push(rule.id.clone());
                 result.reason_codes.push("INSUFFICIENT_CONTEXT".into());
+                continue;
+            }
+            if rule.r#match != Match::Detected {
+                if !self.scorer.supports_model_policies() {
+                    result.status = Status::Indeterminate;
+                    result.coverage.unevaluated_rules.push(rule.id.clone());
+                    result.reason_codes.push("MODEL_UNAVAILABLE".into());
+                    continue;
+                }
+                let policy_text = match rule.r#match {
+                    Match::Score => rule.category.as_deref().expect("validated category"),
+                    Match::PolicyText => rule.policy_text.as_deref().expect("validated policy text"),
+                    Match::Detected => unreachable!(),
+                };
+                let context = (rule.context_requirement == ContextRequirement::SuppliedWindow)
+                    .then(|| {
+                        request
+                            .context
+                            .iter()
+                            .map(|turn| turn.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    });
+                let score = match self.scorer.score(
+                    &request.message.text,
+                    context.as_deref(),
+                    policy_text,
+                ) {
+                    Ok(score) if score.is_finite() && (0.0..=1.0).contains(&score) => score,
+                    _ => {
+                        result
+                            .coverage
+                            .unevaluated_rules
+                            .extend(applicable[index..].iter().map(|r| r.id.clone()));
+                        fail(&mut result, ErrorCode::InternalError);
+                        break;
+                    }
+                };
+                let threshold = match rule.r#match {
+                    Match::Score => rule.action_threshold.expect("validated threshold"),
+                    Match::PolicyText => self.scorer.action_threshold(policy_text).unwrap_or(0.5),
+                    Match::Detected => unreachable!(),
+                };
+                if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
+                    result
+                        .coverage
+                        .unevaluated_rules
+                        .extend(applicable[index..].iter().map(|r| r.id.clone()));
+                    fail(&mut result, ErrorCode::InternalError);
+                    break;
+                }
+                result.findings.push(Finding {
+                    rule_id: rule.id.clone(),
+                    category: rule.category.clone(),
+                    method: if rule.r#match == Match::PolicyText {
+                        Method::CustomPolicy
+                    } else {
+                        Method::Model
+                    },
+                    score: Some(score),
+                    reason_code: "MODEL_SCORE".into(),
+                    spans: vec![],
+                });
+                let action = if score >= threshold {
+                    result.reason_codes.push("POLICY_MATCH".into());
+                    rule.action
+                } else if rule.review_threshold.is_some_and(|low| score >= low) {
+                    Action::Review
+                } else {
+                    Action::Allow
+                };
+                if rank(action) > rank(result.action) {
+                    result.action = action;
+                }
+                continue;
+            }
+            if rule.category.as_deref() != Some("pii.email") {
+                result.status = Status::Indeterminate;
+                result.coverage.unevaluated_rules.push(rule.id.clone());
+                result.reason_codes.push("DETECTOR_UNAVAILABLE".into());
                 continue;
             }
             let score = self.scorer.score(&normal, None, "pii.email");
@@ -290,6 +376,7 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
             || rule.directions.len() > 2
             || (rule.directions.len() == 2 && rule.directions[0] == rule.directions[1])
             || rule.action == Action::Allow
+            || rule.category.as_ref().is_some_and(|category| !identifier(category))
         {
             return Err(ErrorCode::InvalidPolicy);
         }
@@ -318,7 +405,6 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
                 {
                     return Err(ErrorCode::InvalidPolicy);
                 }
-                unsupported = true;
             }
             Match::Score => {
                 let valid = match (rule.review_threshold, rule.action_threshold) {
@@ -338,7 +424,6 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
                 {
                     return Err(ErrorCode::InvalidPolicy);
                 }
-                unsupported = true;
             }
             Match::Detected => {
                 if rule.policy_text.is_some()
@@ -347,9 +432,6 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
                     || rule.action_threshold.is_some()
                 {
                     return Err(ErrorCode::InvalidPolicy);
-                }
-                if rule.category.as_deref() != Some("pii.email") {
-                    unsupported = true;
                 }
                 if rule.action == Action::Block {
                     unsupported = true;

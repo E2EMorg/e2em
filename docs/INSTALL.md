@@ -57,13 +57,13 @@ Install the downloaded file from your Downloads directory, replacing the version
 Ubuntu / Debian:
 
 ```sh
-sudo apt install ./e2em-runtime-0.1.0-x86_64-unknown-linux-musl.deb
+sudo apt install ./e2em-runtime-0.1.1-x86_64-unknown-linux-musl.deb
 ```
 
 Fedora:
 
 ```sh
-sudo dnf install ./e2em-runtime-0.1.0-x86_64-unknown-linux-musl.rpm
+sudo dnf install ./e2em-runtime-0.1.1-x86_64-unknown-linux-musl.rpm
 ```
 
 Then set up and start the runtime as your normal user:

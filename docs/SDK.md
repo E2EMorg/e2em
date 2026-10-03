@@ -1,12 +1,14 @@
-# SDK integration guide
+# Chat SDK integration guide
 
 [Runtime installation](INSTALL.md) · [Contract](runtime/CONTRACT.md) · [Downloads](https://github.com/E2EMorg/e2em/releases)
+
+Integrate E2EM at your chat app's send boundary: assess a draft, show any warning, and confirm that the draft is still current before sending. Preview 0.1 checks for email addresses shared in chat messages (`pii.email`).
 
 Install and start the runtime, then enrol `my-app` using the [platform setup guide](INSTALL.md). Python and Node SDK packages are downloadable release assets; registry publication is not enabled. The Rust and C SDKs support embedding, which needs no running service or enrolment.
 
 ## Policy and credentials
 
-[`examples/email-policy.json`](../examples/email-policy.json) is a complete personal email-warning policy. Copy it into your application or load it from this checkout. It chooses `review` for errors and indeterminate results and requires explicit user confirmation for warnings.
+[`examples/chat-policy.json`](../examples/chat-policy.json) is a complete starting policy for outgoing chat messages. It warns when a draft includes an email address, chooses `review` for errors and indeterminate results, and requires explicit user confirmation for warnings. Copy it into your application or load it from this checkout. The earlier [`email-policy.json`](../examples/email-policy.json) example remains available.
 
 Private credentials created by enrolment contain `socket_path`, `principal`, `secret`, and `provider`:
 
@@ -24,7 +26,7 @@ Python 3.11+; no runtime dependencies outside the standard library.
 ```sh
 python3 -m pip install ./sdk/python
 # Or install the wheel downloaded from a GitHub Release:
-python3 -m pip install ./e2em_local-0.1.0-py3-none-any.whl
+python3 -m pip install ./e2em_local-0.1.1-py3-none-any.whl
 ```
 
 ```python
@@ -40,7 +42,7 @@ async def main():
         if os.name == "nt" else Path.home() / ".config/e2em/apps/my-app.json"
     )
     config = json.loads(credential_path.read_text())
-    policy = json.loads(Path("examples/email-policy.json").read_text())
+    policy = json.loads(Path("examples/chat-policy.json").read_text())
     client = await Client.open(**{key: config[key] for key in
         ("socket_path", "principal", "secret", "provider")})
     async with client:
@@ -48,7 +50,7 @@ async def main():
         request = {
             "api_version": "0.1", "request_id": "draft-1", "direction": "outgoing",
             "message": {"id": "draft", "revision": "1", "speaker": "self",
-                        "text": "Email me at alex@example.test"},
+                        "text": "You can reach me at alex@example.test"},
             "policy_ref": reference,
         }
         try:
@@ -64,7 +66,7 @@ async def main():
 asyncio.run(main())
 ```
 
-The example reports a decision and sends nothing. [`send_flow.py`](../sdk/python/examples/send_flow.py) demonstrates a user-confirmed warning flow using a provisioned candidate array. For synchronous applications, `BlockingClient` owns a dedicated event loop and exposes the same operations; close it explicitly.
+The example reports a decision and sends nothing. [`send_flow.py`](../sdk/python/examples/send_flow.py) demonstrates a chat draft and user-confirmed warning flow using a provisioned candidate array and the chat policy. For synchronous applications, `BlockingClient` owns a dedicated event loop and exposes the same operations; close it explicitly.
 
 ## Node and TypeScript
 
@@ -73,7 +75,7 @@ Node.js 22+; no inference or external runtime dependencies. The SDK ships genera
 ```sh
 npm install ./sdk/node
 # Or install the release asset:
-npm install ./e2em-local-0.1.0.tgz
+npm install ./e2em-local-0.1.1.tgz
 ```
 
 ```javascript
@@ -86,7 +88,7 @@ const credentialPath = process.platform === 'win32'
   ? path.join(process.env.LOCALAPPDATA, 'E2EM', 'app-my-app.json')
   : path.join(os.homedir(), '.config/e2em/apps/my-app.json');
 const config = JSON.parse(await fs.readFile(credentialPath, 'utf8'));
-const policy = JSON.parse(await fs.readFile('examples/email-policy.json', 'utf8'));
+const policy = JSON.parse(await fs.readFile('examples/chat-policy.json', 'utf8'));
 const client = await Client.open({
   socketPath: config.socket_path,
   principal: config.principal, secret: config.secret, provider: config.provider,
@@ -96,7 +98,7 @@ try {
   const request = {
     api_version: '0.1', request_id: 'draft-1', direction: 'outgoing',
     message: {id: 'draft', revision: '1', speaker: 'self',
-              text: 'Email me at alex@example.test'},
+              text: 'You can reach me at alex@example.test'},
     policy_ref,
   };
   const result = await client.assess(request);
@@ -109,7 +111,7 @@ try {
 }
 ```
 
-The Promise API also offers `capabilities()`, `cancel(requestId)`, and `assess(request, signal)` for cancellation. `discover()` takes explicitly provisioned candidates; it never silently downloads or switches providers. [`send-flow.js`](../sdk/node/examples/send-flow.js) demonstrates the warning confirmation step. The browser entry point is an explicit bridge interface; a browser extension transport is not shipped.
+The Promise API also offers `capabilities()`, `cancel(requestId)`, and `assess(request, signal)` for cancellation. `discover()` takes explicitly provisioned candidates; it never silently downloads or switches providers. [`send-flow.js`](../sdk/node/examples/send-flow.js) demonstrates the chat warning confirmation step. The browser entry point is an explicit bridge interface; a browser extension transport is not shipped.
 
 ## Rust
 
@@ -117,7 +119,7 @@ Rust 1.95+. Use the tagged Git repository or unpack the Rust SDK source archive 
 
 ```toml
 [dependencies]
-e2em-runtime = { git = "https://github.com/E2EMorg/e2em.git", tag = "v0.1.0", default-features = false }
+e2em-runtime = { git = "https://github.com/E2EMorg/e2em.git", tag = "v0.1.1", default-features = false }
 serde_json = "1"
 ```
 
@@ -125,7 +127,7 @@ serde_json = "1"
 use e2em_runtime::runtime::*;
 
 fn main() {
-    let policy: Policy = serde_json::from_str(include_str!("email-policy.json"))
+    let policy: Policy = serde_json::from_str(include_str!("chat-policy.json"))
         .expect("valid application policy");
     let engine = Engine::default();
     let reference = engine.validate_policy("my-app", policy)
@@ -135,7 +137,7 @@ fn main() {
         direction: Direction::Outgoing,
         message: Message {
             id: "draft".into(), revision: "1".into(), speaker: "self".into(),
-            text: "Email me at alex@example.test".into(),
+            text: "You can reach me at alex@example.test".into(),
         },
         context: vec![], language: "en".into(), options: Options::default(),
         policy_ref: Some(reference), policy: None,
@@ -169,7 +171,7 @@ Linux native C libraries are built for the release's Ubuntu 24.04 runner and can
 
 1. Open an authenticated client and check actual capabilities.
 2. Validate your immutable, explicitly versioned policy. Store its reference only for this provider instance.
-3. Snapshot the current message, context, policy, IDs and revision, then assess.
+3. Snapshot the current chat draft, context, policy, IDs and revision, then assess.
 4. If the draft changes, cancel its work where possible and submit the new revision.
 5. Check the assessment against the **current** request immediately before acting.
 6. Allow only `allow`, or an explicitly user-confirmed `warn` permitted by policy; hold `review`, errors and incomplete/stale results.

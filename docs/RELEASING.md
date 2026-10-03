@@ -4,7 +4,7 @@ Runtime and SDKs use one version and Git tag. API `0.1` and C ABI `1` have indep
 
 1. Update the versions in the root and both crate manifests, `sdk/python/pyproject.toml`, and `sdk/node/package.json`. Update examples/changelog for the new release.
 2. Regenerate `Cargo.lock`, run contributor checks, and commit the changes.
-3. Tag the commit `vMAJOR.MINOR.PATCH` and push the tag. For example: `git tag v0.1.0` then `git push origin v0.1.0`.
+3. Tag the commit `vMAJOR.MINOR.PATCH` and push the tag. For example: `git tag v0.1.1` then `git push origin v0.1.1`.
 4. The release workflow checks tag/package version agreement, runs CI and native Windows/macOS service checks, builds and lifecycle-tests native installers, builds SDK distributions, and verifies packaged SDK imports.
 5. Only after all jobs pass, it creates a **prerelease** with installers, metadata, SDK packages, historical-independent native reports, and `SHA256SUMS`.
 

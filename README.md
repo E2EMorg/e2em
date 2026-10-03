@@ -85,8 +85,8 @@ SDK packages are attached to the same [versioned GitHub Releases](https://github
 For downloaded Python wheels and Node archives:
 
 ```sh
-python3 -m pip install ./e2em_local-0.1.0-py3-none-any.whl
-npm install ./e2em-local-0.1.0.tgz
+python3 -m pip install ./e2em_local-0.1.1-py3-none-any.whl
+npm install ./e2em-local-0.1.1.tgz
 ```
 
 Rust SDK source and native C ABI archives are also included. Python/Node SDKs connect to an installed and enrolled runtime; installing an SDK alone does not start one.

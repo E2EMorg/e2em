@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.1.0 — Developer preview
+## 0.1.1 — First downloadable developer preview
+
+- Fix Windows PowerShell enrolment replacement and enable explicit setup execution.
+- Normalize native macOS static-link diagnostics and package path expectations.
+- Preserve architecture-specific native reports and validate flattened release assets.
+
+
+## 0.1.0 — Initial source preview (not distributed)
 
 - Extract a dedicated runtime and SDK repository from the E2EM research project.
 - Ship the local daemon, embedded Rust API and C ABI 1.

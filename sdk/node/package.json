@@ -1,8 +1,8 @@
 {
   "name": "@e2em/local",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
-  "description": "Local E2EM Node service client; no inference dependencies",
+  "description": "Local E2EM chat message assessment client for Node; no inference dependencies",
   "exports": {
     ".": {
       "types": "./index.d.ts",

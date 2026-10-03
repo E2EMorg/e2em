@@ -73,6 +73,26 @@ impl LoadedBackend {
 }
 struct SharedScorer(Arc<LoadedBackend>);
 impl crate::PolicyScorer for SharedScorer {
+    fn supports_model_policies(&self) -> bool {
+        self.0.scorer.lock().is_ok_and(|scorer| {
+            scorer.as_ref().is_some_and(|scorer| scorer.supports_model_policies())
+        })
+    }
+    fn model_version(&self) -> String {
+        self.0
+            .scorer
+            .lock()
+            .ok()
+            .and_then(|scorer| scorer.as_ref().map(|scorer| scorer.model_version()))
+            .unwrap_or_else(|| "none".into())
+    }
+    fn action_threshold(&self, policy: &str) -> Option<f64> {
+        self.0
+            .scorer
+            .lock()
+            .ok()
+            .and_then(|scorer| scorer.as_ref().and_then(|scorer| scorer.action_threshold(policy)))
+    }
     fn score(
         &self,
         message: &str,
@@ -147,8 +167,8 @@ impl Scheduler {
     pub fn new(idle: Duration) -> Self {
         Self::with_factory(idle, || Ok(Box::new(crate::RulesScorer::new())))
     }
-    /// Factories must be local, bounded and data-only. This preview validates
-    /// only email semantics; using a research scorer does not qualify a model.
+    /// Factories must be local, bounded and data-only. Model backends opt into
+    /// arbitrary policy scoring; policy evaluation ratings do not gate access.
     pub fn with_factory(
         idle: Duration,
         factory: impl Fn() -> Result<Backend, crate::BackendError> + Send + Sync + 'static,

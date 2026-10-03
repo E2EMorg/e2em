@@ -1,4 +1,4 @@
-"""Reference local outgoing hook. Credentials are provisioned before assessment."""
+"""Reference local chat send hook. Credentials are provisioned before assessment."""
 import asyncio
 import copy
 import json
@@ -12,7 +12,7 @@ async def main():
     client=await Client.discover(candidates,["pii.email"])
     async with client:
         reference=await client.validate_policy(policy)
-        current={"api_version":"0.1","request_id":"draft-1","direction":"outgoing","message":{"id":"draft","revision":"1","speaker":"self","text":input("Draft: ")},"policy_ref":reference}
+        current={"api_version":"0.1","request_id":"draft-1","direction":"outgoing","message":{"id":"draft","revision":"1","speaker":"self","text":input("Chat message: ")},"policy_ref":reference}
         snapshot=copy.deepcopy(current)
         try: result=await client.assess(snapshot)
         except E2EMError as error:
@@ -23,8 +23,8 @@ async def main():
             print("Draft changed; assess its new revision.");return
         permitted=result.action == "allow"
         if result.action == "warn" and policy["override"] == "user_confirm":
-            permitted=input("This message includes an email address. Type send to continue: ") == "send"
+            permitted=input("This chat message shares an email address. Type send to continue: ") == "send"
         if permitted and result.applies_to(current):
-            print("Local reference send operation accepted.")
+            print("Message accepted by the local reference chat.")
         else: print("Message held. Edit or retry.")
 if __name__ == "__main__": asyncio.run(main())

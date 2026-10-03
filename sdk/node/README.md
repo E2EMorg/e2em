@@ -1,11 +1,11 @@
 # E2EM Node / TypeScript SDK
 
-A local E2EM client for Node.js 22+, with generated TypeScript contract types and no inference dependencies.
+A local E2EM client for assessing chat messages before sending, for Node.js 22+, with generated TypeScript contract types and no inference dependencies.
 
 ```sh
 npm install ./sdk/node
 # From a release download:
-npm install ./e2em-local-0.1.0.tgz
+npm install ./e2em-local-0.1.1.tgz
 ```
 
 [Install the runtime](https://github.com/E2EMorg/e2em/blob/main/docs/INSTALL.md), enrol an app, and follow the [complete JavaScript example](https://github.com/E2EMorg/e2em/blob/main/docs/SDK.md#node-and-typescript).
@@ -14,4 +14,4 @@ npm install ./e2em-local-0.1.0.tgz
 
 The `./browser` entry point defines an explicit bridge interface; it does not provide Node IPC or a browser extension transport.
 
-Preview 0.1 supports personal email warnings only. Packages are distributed through [GitHub Releases](https://github.com/E2EMorg/e2em/releases); npm registry publication is not enabled. Licensed under [MIT](LICENSE).
+Start with the [chat policy](https://github.com/E2EMorg/e2em/blob/main/examples/chat-policy.json). Preview 0.1 supports personal warnings for email addresses shared in chat messages (`pii.email`). Packages are distributed through [GitHub Releases](https://github.com/E2EMorg/e2em/releases); npm registry publication is not enabled. Licensed under [MIT](LICENSE).

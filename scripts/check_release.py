@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,25 @@ def release_version(root=ROOT):
     if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version):
         raise ValueError("release version must be MAJOR.MINOR.PATCH")
     return version
+
+
+def stage_assets(source, destination):
+    # Artifact downloads retain their upload paths. Flatten only after checking
+    # all basenames, so two native reports can never overwrite each other.
+    files = {}
+    for path in sorted(source.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("release artifacts must not contain symlinks")
+        if not path.is_file():
+            continue
+        if path.name in files:
+            raise ValueError(f"duplicate release asset basename: {path.name}")
+        files[path.name] = path
+    if destination.exists() and any(destination.iterdir()):
+        raise ValueError("release staging directory must be empty")
+    destination.mkdir(parents=True, exist_ok=True)
+    for name, path in files.items():
+        shutil.copyfile(path, destination / name)
 
 
 def verify_assets(directory, version):
@@ -68,10 +88,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag")
     parser.add_argument("--assets", type=Path)
+    parser.add_argument("--downloads", type=Path)
     args = parser.parse_args()
     version = release_version()
     if args.tag and args.tag != "v" + version:
         parser.error(f"tag must match runtime/SDK version: v{version}")
+    if args.downloads:
+        if not args.assets:
+            parser.error("--downloads requires --assets")
+        stage_assets(args.downloads, args.assets)
     if args.assets:
         verify_assets(args.assets, version)
     print(f"Runtime and SDK release {version} validated")
