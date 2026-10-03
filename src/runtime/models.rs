@@ -343,9 +343,16 @@ impl Manager {
             return Err(io::Error::other("invalid native model configuration"));
         }
         let root = self.root()?;
+        private(&root, true)?;
+        let root = fs::canonicalize(root)?;
         for installed in config.models.values() {
             for path in std::iter::once(&installed.current).chain(installed.previous.iter()) {
-                if path.parent() != Some(root.as_path()) {
+                if path
+                    .parent()
+                    .and_then(|parent| fs::canonicalize(parent).ok())
+                    .as_ref()
+                    != Some(&root)
+                {
                     return Err(io::Error::other("model path escapes private store"));
                 }
                 private(path, true)?;

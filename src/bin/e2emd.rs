@@ -51,7 +51,7 @@ struct Args {
     /// Disable background updates and run the installed base executable.
     #[arg(long)]
     no_auto_update: bool,
-    #[arg(long, value_enum, default_value_t = Channel::Preview)]
+    #[arg(long, value_enum, default_value_t = Channel::Stable)]
     update_channel: Channel,
     #[arg(long, default_value_t = 21600, value_parser = clap::value_parser!(u64).range(300..=604800))]
     update_check_seconds: u64,

@@ -22,8 +22,8 @@ pub const UPDATE_EXIT: i32 = 75;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum Channel {
-    Stable,
     #[default]
+    Stable,
     Preview,
 }
 #[derive(Clone)]

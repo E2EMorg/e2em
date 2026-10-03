@@ -3,8 +3,7 @@
 Managed user setup enables background updates on Linux, macOS and Windows.
 The daemon checks the canonical `E2EMorg/e2em` GitHub release feed after **60
 seconds without runtime work**, then at most once every **six hours** following
-a successful check. Preview releases are included by default because the current
-distribution is a developer preview. No app messages, credentials or policies
+a successful check. The default channel accepts stable releases; including prereleases is an explicit opt-in. No app messages, credentials or policies
 are sent to the update server.
 
 All request operations and authentication count as work. Assessment work stays
@@ -55,7 +54,7 @@ app credentials remain intact. If a manually installed package catches up to
 or passes the selected downloaded version, its executable takes precedence at
 the next start.
 
-Preview payloads are unsigned. Checksums establish byte integrity; publisher
+Runtime payloads are unsigned. Checksums establish byte integrity; publisher
 trust currently comes from HTTPS and the canonical GitHub repository. Release
 signing and notarization remain distribution milestones.
 
@@ -70,8 +69,8 @@ the same flag after upgrading to an updater-capable executable.
 | --- | --- |
 | `--auto-update` | Enable the background updater and restart supervisor |
 | `--no-auto-update` | Override enablement and run the original installed executable |
-| `--update-channel preview` | Include published prereleases (default) |
-| `--update-channel stable` | Accept only stable releases |
+| `--update-channel preview` | Include published prereleases |
+| `--update-channel stable` | Accept only stable releases (default) |
 | `--update-idle-seconds 60` | Quiet window before update work/restart (1–86400) |
 | `--update-check-seconds 21600` | Successful-check interval (300–604800) |
 | `--update-status` | Print persisted JSON status; only `--grants` is required |
