@@ -10,6 +10,7 @@ Extraction changes:
 - Reduce the bundled scorer to the existing email detector and its normalization; remove the research registry and lexical heuristics.
 - Enable the daemon by default; keep diagnostic worker opt-in.
 - Report the compiled package version in runtime capabilities.
+- In 0.1.1, accept named detected/score categories for reporting, return explicit unevaluated coverage for missing backends, and support trusted embedded scorers without a model-rating eligibility gate.
 - Apply the MIT license selected by the project owner to the new repository; retain dependency-specific licenses.
 - Add download-first documentation, SDK package metadata, native release artifacts and publication checks.
 

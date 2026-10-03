@@ -1,4 +1,4 @@
-E2EM runtime and SDK developer preview. Personal email warnings, authenticated local IPC, and embedded Rust/C APIs. No model or GPU required.
+E2EM runtime and SDK developer preview. Chat message assessment, authenticated local IPC, and embedded Rust/C APIs. Named categories are accepted for reporting; the bundled backend evaluates email patterns and holds unavailable checks for review. No model or GPU required.
 
 **Start here:** [Installation guide](https://github.com/E2EMorg/e2em/blob/main/docs/INSTALL.md) · [SDK guide](https://github.com/E2EMorg/e2em/blob/main/docs/SDK.md) · [Changelog](https://github.com/E2EMorg/e2em/blob/main/CHANGELOG.md)
 
@@ -12,7 +12,7 @@ Choose an installer for your computer:
 | Debian / Ubuntu x86_64 | `x86_64-unknown-linux-musl.deb` |
 | Fedora x86_64 | `x86_64-unknown-linux-musl.rpm` |
 
-Installers are **unsigned**. Application enrolment and user-session startup remain explicit. Installing E2EM alone does not change other apps. This preview supports personal email-pattern warnings only; contextual models, block enforcement, browser transport, and sandbox brokers are not shipped.
+Installers are **unsigned**. Application enrolment and user-session startup remain explicit. Installing E2EM alone does not change other apps. The bundled check provides personal email-pattern warnings. Other named categories are reported as unevaluated without a supplied backend; no contextual model, block enforcement, browser transport, or sandbox broker is shipped.
 
 Python wheel/source, Node `.tgz`, Rust source and platform C SDK archives are included. Registry publication is not configured. Linux C SDK libraries use the Ubuntu 24.04 runner baseline; Linux runtime installers are musl-static.
 
