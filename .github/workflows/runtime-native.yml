@@ -1,0 +1,63 @@
+name: Native desktop runtime qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --workspace --features runtime-service,runtime-probes
+      - run: cargo clippy --locked --workspace --all-targets --features runtime-service,runtime-probes -- -D warnings
+      - run: cargo test --locked -p e2em-platform
+      - run: cargo test --locked --workspace --features runtime-service,runtime-probes
+      - run: python scripts/check_runtime_windows.py --binary target/debug/e2emd.exe --output e2em-windows.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-user-runtime
+          path: e2em-windows.json
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15-intel, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --workspace --features runtime-service,runtime-probes
+      - run: cargo clippy --locked --workspace --all-targets --features runtime-service,runtime-probes -- -D warnings
+      - run: cargo test --locked --workspace --features runtime-service,runtime-probes
+      - run: python3 scripts/check_runtime_macos.py --binary target/debug/e2emd --output e2em-macos-${{ matrix.runner }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-user-runtime-${{ matrix.runner }}
+          path: e2em-macos-${{ matrix.runner }}.json

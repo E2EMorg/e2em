@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Installation and SDK guide
+    url: https://github.com/E2EMorg/e2em/blob/main/docs/INSTALL.md
+    about: Start here for downloads, setup, and common errors.
+  - name: Security vulnerability
+    url: https://github.com/E2EMorg/e2em/security/advisories/new
+    about: Report sensitive security issues privately.

@@ -1,0 +1,40 @@
+{
+  "name": "@e2em/local",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local E2EM Node service client; no inference dependencies",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./browser": "./browser.js"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "contract.d.ts",
+    "browser.js",
+    "schema.js",
+    "response.schema.json",
+    "LICENSE",
+    "README.md",
+    "examples"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test.mjs"
+  },
+  "license": "MIT",
+  "homepage": "https://e2em.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/E2EMorg/e2em.git",
+    "directory": "sdk/node"
+  },
+  "bugs": {
+    "url": "https://github.com/E2EMorg/e2em/issues"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "platform": "Linux",
+  "kernel": "6.8.0-139-generic",
+  "architecture": "x86_64",
+  "backend": "rules-only / pii.email",
+  "model": "none",
+  "idle_timeout_seconds": 1,
+  "configured_default_seconds": 300,
+  "initial_unloaded_rss_kib": 9208,
+  "cycles": [
+    {
+      "ready_rss_kib": 24440,
+      "unloaded_rss_kib": 24440,
+      "idle_context_switch_delta": 0
+    },
+    {
+      "ready_rss_kib": 24444,
+      "unloaded_rss_kib": 24444,
+      "idle_context_switch_delta": 0
+    },
+    {
+      "ready_rss_kib": 24444,
+      "unloaded_rss_kib": 24444,
+      "idle_context_switch_delta": 0
+    }
+  ],
+  "cold_reload": {
+    "samples": 3,
+    "p50_ms": 1.8476879922673106,
+    "p95_ms": 454.11656401120126
+  },
+  "warm_end_to_end": {
+    "samples": 150,
+    "p50_ms": 0.5643120384775102,
+    "p95_ms": 1.0676200035959482
+  },
+  "energy_measurement": null,
+  "limits": "No contextual model or accelerator is loaded. RSS includes Tokio threads, regex cache and allocator retention. Energy counters and Windows/macOS measurements are unavailable. This run measures request/response latency, not a model release gate."
+}

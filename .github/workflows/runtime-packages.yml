@@ -1,0 +1,146 @@
+name: Runtime packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y rpm musl-tools
+      - run: python3 -m unittest discover -s tests -p 'test_runtime_packaging.py'
+      - run: cargo build --locked --release --features runtime-service --bin e2emd --target x86_64-unknown-linux-musl
+      - name: Build packages and upgrade fixtures
+        run: |
+          UPGRADE_VERSION=$(python3 -c 'import tomllib; v=tomllib.load(open("Cargo.toml","rb"))["package"]["version"].split("."); v[2]=str(int(v[2])+1); print(".".join(v))')
+          for format in deb rpm; do
+            python3 scripts/package_runtime.py --format "$format" --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime
+            python3 scripts/package_runtime.py --format "$format" --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/upgrade --version "$UPGRADE_VERSION"
+          done
+      - name: Native Debian package lifecycle
+        run: |
+          mkdir -p dist/reports
+          docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" debian:bookworm bash -lc 'apt-get update -qq && apt-get install -y python3 && python3 /work/scripts/check_runtime_package.py --format deb --package /work/dist/runtime/*.deb --upgrade-package /work/dist/upgrade/*.deb --output /reports/deb.json'
+      - name: Native Fedora package lifecycle
+        run: |
+          docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" fedora:43 bash -lc 'dnf install -y python3 rpm && python3 /work/scripts/check_runtime_package.py --format rpm --package /work/dist/runtime/*.rpm --upgrade-package /work/dist/upgrade/*.rpm --output /reports/rpm.json'
+      - name: Build native C SDK
+        run: |
+          cargo build --locked --release -p e2em-ffi
+          python3 scripts/package_c_sdk.py --target x86_64-unknown-linux-gnu --library-dir target/release --output dist/runtime
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2em-runtime-linux-unsigned
+          path: |
+            dist/runtime/*
+            dist/reports/*
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-2022
+    env:
+      DOTNET_ROLL_FORWARD: Major
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - run: dotnet tool install --global wix --version 4.0.6
+      - run: wix --version
+      - run: python -m unittest discover -s tests -p 'test_runtime_packaging.py'
+      - run: cargo build --locked --release --features runtime-service --bin e2emd --target x86_64-pc-windows-msvc
+        env:
+          RUSTFLAGS: '-C target-feature=+crt-static'
+      - name: Build MSI and upgrade fixture
+        run: |
+          UPGRADE_VERSION=$(python -c 'import tomllib; v=tomllib.load(open("Cargo.toml","rb"))["package"]["version"].split("."); v[2]=str(int(v[2])+1); print(".".join(v))')
+          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime
+          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/upgrade --version "$UPGRADE_VERSION"
+      - name: Native MSI lifecycle
+        run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*.msi --upgrade-package dist/upgrade/*.msi --output dist/reports/msi.json
+      - name: Build native C SDK
+        run: |
+          cargo build --locked --release -p e2em-ffi --target x86_64-pc-windows-msvc
+          python scripts/package_c_sdk.py --target x86_64-pc-windows-msvc --library-dir target/x86_64-pc-windows-msvc/release --output dist/runtime
+        env:
+          RUSTFLAGS: '-C target-feature=+crt-static'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2em-runtime-windows-x64-unsigned
+          path: |
+            dist/runtime/*
+            dist/reports/*
+          if-no-files-found: error
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: python3 -m unittest discover -s tests -p 'test_runtime_packaging.py'
+      - run: cargo build --locked --release --features runtime-service --bin e2emd --target ${{ matrix.target }}
+      - name: Build PKG and upgrade fixture
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          UPGRADE_VERSION=$(python3 -c 'import tomllib; v=tomllib.load(open("Cargo.toml","rb"))["package"]["version"].split("."); v[2]=str(int(v[2])+1); print(".".join(v))')
+          python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/runtime
+          python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/upgrade --version "$UPGRADE_VERSION"
+      - name: Native PKG lifecycle
+        run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*.pkg --upgrade-package dist/upgrade/*.pkg --output "dist/reports/pkg-$TARGET.json"
+      - name: Build native C SDK
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          cargo build --locked --release -p e2em-ffi --target "$TARGET"
+          python3 scripts/package_c_sdk.py --target "$TARGET" --library-dir "target/$TARGET/release" --output dist/runtime
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2em-runtime-${{ matrix.target }}-unsigned
+          path: |
+            dist/runtime/*
+            dist/reports/*
+          if-no-files-found: error

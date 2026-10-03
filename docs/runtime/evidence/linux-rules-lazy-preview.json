@@ -1,0 +1,40 @@
+{
+  "platform": "Linux",
+  "kernel": "6.8.0-139-generic",
+  "architecture": "x86_64",
+  "backend": "rules-only / pii.email",
+  "model": "none",
+  "idle_timeout_seconds": 1,
+  "configured_default_seconds": 300,
+  "initial_unloaded_rss_kib": 9248,
+  "cycles": [
+    {
+      "ready_rss_kib": 10260,
+      "unloaded_rss_kib": 10260,
+      "idle_context_switch_delta": 1
+    },
+    {
+      "ready_rss_kib": 10268,
+      "unloaded_rss_kib": 10268,
+      "idle_context_switch_delta": 1
+    },
+    {
+      "ready_rss_kib": 10268,
+      "unloaded_rss_kib": 10268,
+      "idle_context_switch_delta": 0
+    }
+  ],
+  "cold_reload": {
+    "samples": 3,
+    "p50_ms": 1.2812709901481867,
+    "p95_ms": 2.8309979825280607
+  },
+  "warm_end_to_end": {
+    "samples": 150,
+    "p50_ms": 0.566114962566644,
+    "p95_ms": 0.7331499946303666
+  },
+  "energy_measurement": null,
+  "limits": "No contextual model or accelerator is loaded. RSS includes Tokio threads, regex cache and allocator retention. Energy counters and Windows/macOS measurements are unavailable. This run measures request/response latency, not a model release gate.",
+  "comparison": "Measured after per-category lazy heuristic compilation; same host as linux-rules-psi-preview.json. Three cold samples are diagnostic, not a release latency guarantee."
+}

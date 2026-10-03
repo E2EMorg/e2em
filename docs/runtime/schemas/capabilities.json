@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Capabilities",
+  "type": "object",
+  "properties": {
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Action"
+      }
+    },
+    "api_version": {
+      "type": "string"
+    },
+    "backend_ready": {
+      "type": "boolean"
+    },
+    "custom_policies": {
+      "type": "string"
+    },
+    "detectors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    },
+    "max_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 0
+    },
+    "model": {
+      "type": "string"
+    },
+    "presets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Profile"
+      }
+    },
+    "provider": {
+      "type": "string"
+    },
+    "registry": {
+      "type": "string"
+    },
+    "runtime": {
+      "type": "string"
+    },
+    "runtime_state": {
+      "$ref": "#/$defs/State"
+    },
+    "tokenizer": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "api_version",
+    "provider",
+    "runtime",
+    "model",
+    "tokenizer",
+    "registry",
+    "languages",
+    "detectors",
+    "presets",
+    "custom_policies",
+    "profiles",
+    "actions",
+    "limits",
+    "backend_ready",
+    "runtime_state"
+  ],
+  "$defs": {
+    "Action": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "warn",
+        "review",
+        "block"
+      ]
+    },
+    "Limits": {
+      "type": "object",
+      "properties": {
+        "context_turns": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "deadline_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "frame_bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "message_bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "policy_rules": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "request_text_bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "result_spans": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message_bytes",
+        "request_text_bytes",
+        "context_turns",
+        "policy_rules",
+        "frame_bytes",
+        "result_spans",
+        "deadline_ms"
+      ]
+    },
+    "Profile": {
+      "type": "string",
+      "enum": [
+        "personal",
+        "platform"
+      ]
+    },
+    "State": {
+      "type": "string",
+      "enum": [
+        "unloaded",
+        "loading",
+        "ready",
+        "assessing",
+        "evicting",
+        "failed"
+      ]
+    }
+  }
+}

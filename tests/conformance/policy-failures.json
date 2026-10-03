@@ -1,0 +1,257 @@
+[
+  {
+    "name": "undeclared-preset",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "abuse.threat",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "error_code": "UNSUPPORTED_POLICY"
+  },
+  {
+    "name": "platform-authority",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "platform",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "pii.email",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "error_code": "UNSUPPORTED_POLICY"
+  },
+  {
+    "name": "invalid-error-action",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "pii.email",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "allow",
+      "override": "user_confirm"
+    },
+    "error_code": "INVALID_POLICY"
+  },
+  {
+    "name": "duplicate-rule",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "pii.email",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        },
+        {
+          "id": "email-warning",
+          "category": "pii.email",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "error_code": "INVALID_POLICY"
+  },
+  {
+    "name": "latest-version",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "latest",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "pii.email",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "error_code": "INVALID_POLICY"
+  },
+  {
+    "name": "unsupported-custom",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "policy_text",
+          "context_requirement": "target_only",
+          "action": "warn",
+          "policy_text": "Do not discuss a former partner."
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "error_code": "UNSUPPORTED_POLICY"
+  },
+  {
+    "name": "custom-block",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "policy_text",
+          "context_requirement": "target_only",
+          "action": "block",
+          "policy_text": "Do not discuss a former partner."
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "error_code": "INVALID_POLICY"
+  },
+  {
+    "name": "custom-block-after-unsupported",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "undeclared",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        },
+        {
+          "id": "custom-block",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "policy_text",
+          "context_requirement": "target_only",
+          "action": "block",
+          "policy_text": "Do not discuss a former partner."
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm"
+    },
+    "error_code": "INVALID_POLICY"
+  },
+  {
+    "name": "unknown-policy-field",
+    "policy": {
+      "schema_version": "0.1",
+      "id": "personal-basic",
+      "version": "1",
+      "profile": "personal",
+      "rules": [
+        {
+          "id": "email-warning",
+          "category": "pii.email",
+          "directions": [
+            "outgoing"
+          ],
+          "match": "detected",
+          "context_requirement": "target_only",
+          "action": "warn"
+        }
+      ],
+      "default_action": "allow",
+      "on_indeterminate": "review",
+      "on_error": "review",
+      "override": "user_confirm",
+      "unknown_field": true
+    },
+    "error_code": "INVALID_POLICY"
+  }
+]

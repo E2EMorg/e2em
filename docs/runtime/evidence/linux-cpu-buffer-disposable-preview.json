@@ -1,0 +1,51 @@
+{
+  "accelerator": null,
+  "allocated_mib": 64,
+  "assets": "synthetic page-touched CPU buffers",
+  "cycles": [
+    {
+      "broker_ready_rss_kib": 8876,
+      "cause": "idle timeout",
+      "coalesced_eight_request_duration_ms": 45.736202,
+      "drops": 1,
+      "loads": 1,
+      "ready_rss_kib": 81868,
+      "released_rss_kib": 72864,
+      "returned_to_baseline": true,
+      "unloaded_rss_kib": 9004,
+      "worker_ready_rss_kib": 72992,
+      "worker_reaped": true
+    },
+    {
+      "broker_ready_rss_kib": 9008,
+      "cause": "explicit memory pressure",
+      "coalesced_eight_request_duration_ms": 43.999522999999996,
+      "drops": 2,
+      "loads": 2,
+      "ready_rss_kib": 81964,
+      "released_rss_kib": 72956,
+      "returned_to_baseline": true,
+      "unloaded_rss_kib": 9008,
+      "worker_ready_rss_kib": 72956,
+      "worker_reaped": true
+    },
+    {
+      "broker_ready_rss_kib": 9012,
+      "cause": "idle timeout",
+      "coalesced_eight_request_duration_ms": 43.57284,
+      "drops": 3,
+      "loads": 3,
+      "ready_rss_kib": 81992,
+      "released_rss_kib": 72980,
+      "returned_to_baseline": true,
+      "unloaded_rss_kib": 9012,
+      "worker_ready_rss_kib": 72980,
+      "worker_reaped": true
+    }
+  ],
+  "initial_unloaded_rss_kib": 7692,
+  "limits": "Tests owned CPU allocation disposal through the shared runtime loader, including coalesced reload and policy retention. No tokenizer/model inference, accelerator or model-quality qualification.",
+  "mode": "disposable native worker",
+  "model": null,
+  "platform": "Linux native Rust CPU allocation probe"
+}

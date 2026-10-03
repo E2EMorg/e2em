@@ -1,0 +1,14 @@
+/target/
+/dist/
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+*.egg-info/
+/sdk/python/build/
+/sdk/python/dist/
+.env
+.env.*
+*.swp
+.DS_Store

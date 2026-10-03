@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.1",
+  "id": "personal-basic",
+  "version": "1",
+  "profile": "personal",
+  "rules": [
+    {
+      "id": "email-warning",
+      "category": "pii.email",
+      "directions": [
+        "outgoing"
+      ],
+      "match": "detected",
+      "context_requirement": "target_only",
+      "action": "warn"
+    }
+  ],
+  "default_action": "allow",
+  "on_indeterminate": "review",
+  "on_error": "review",
+  "override": "user_confirm"
+}

@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Request",
+  "type": "object",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "context": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Turn"
+      }
+    },
+    "direction": {
+      "$ref": "#/$defs/Direction"
+    },
+    "language": {
+      "type": "string",
+      "default": "auto"
+    },
+    "message": {
+      "$ref": "#/$defs/Message"
+    },
+    "options": {
+      "$ref": "#/$defs/Options",
+      "default": {
+        "deadline_ms": 1000,
+        "include_spans": false
+      }
+    },
+    "policy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Policy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "policy_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PolicyRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "api_version",
+    "request_id",
+    "direction",
+    "message"
+  ],
+  "$defs": {
+    "Action": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "warn",
+        "review",
+        "block"
+      ]
+    },
+    "ContextRequirement": {
+      "type": "string",
+      "enum": [
+        "target_only",
+        "supplied_window"
+      ]
+    },
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "outgoing",
+        "incoming"
+      ]
+    },
+    "Match": {
+      "type": "string",
+      "enum": [
+        "detected",
+        "score",
+        "policy_text"
+      ]
+    },
+    "Message": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "speaker": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "speaker",
+        "text"
+      ]
+    },
+    "Options": {
+      "type": "object",
+      "properties": {
+        "deadline_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 1000,
+          "minimum": 0
+        },
+        "include_spans": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "Override": {
+      "type": "string",
+      "enum": [
+        "user_confirm",
+        "forbidden"
+      ]
+    },
+    "Policy": {
+      "type": "object",
+      "properties": {
+        "default_action": {
+          "$ref": "#/$defs/Action"
+        },
+        "id": {
+          "type": "string"
+        },
+        "on_error": {
+          "$ref": "#/$defs/Action"
+        },
+        "on_indeterminate": {
+          "$ref": "#/$defs/Action"
+        },
+        "override": {
+          "$ref": "#/$defs/Override"
+        },
+        "profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "id",
+        "version",
+        "profile",
+        "rules",
+        "default_action",
+        "on_indeterminate",
+        "on_error",
+        "override"
+      ]
+    },
+    "PolicyRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "id",
+        "version",
+        "token"
+      ]
+    },
+    "Profile": {
+      "type": "string",
+      "enum": [
+        "personal",
+        "platform"
+      ]
+    },
+    "Rule": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "action_threshold": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "context_requirement": {
+          "$ref": "#/$defs/ContextRequirement"
+        },
+        "directions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Direction"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/Match"
+        },
+        "min_context_messages": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "policy_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "review_threshold": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "directions",
+        "match",
+        "context_requirement",
+        "action"
+      ]
+    },
+    "Turn": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "speaker": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "speaker",
+        "text"
+      ]
+    }
+  }
+}

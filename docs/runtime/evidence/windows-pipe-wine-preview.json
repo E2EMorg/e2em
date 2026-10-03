@@ -1,0 +1,13 @@
+{
+  "platform": "Windows GNU binary under Wine on Linux",
+  "wine_version": "wine-9.0 (Ubuntu 9.0~repack-4build3)",
+  "passed_compatibility_tests": [
+    "named_pipe_authentication_fixtures_revocation_and_restart",
+    "windows_registry_rejects_foreign_sid_legacy_uid_duplicates_and_large_files",
+    "pipe_names_reject_remote_and_unrelated_names"
+  ],
+  "first_instance_security_test_passed_under_wine": false,
+  "security_test_output": "\nrunning 1 test\ntest first_instance_rejects_namespace_takeover ... FAILED\n\nfailures:\n\nfailures:\n    first_instance_rejects_namespace_takeover\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s\n\n\nthread 'first_instance_rejects_namespace_takeover' (268) panicked at tests/runtime_windows.rs:182:5:\nassertion failed: e2em_platform::create_user_pipe(&name, true).is_err()\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+  "native_qualification": false,
+  "limits": "Compatibility only. Native Windows token/ACL, first-instance enforcement, Python IOCP, installer and packaged-app qualification remain open. No macOS, contextual-model memory or energy qualification."
+}

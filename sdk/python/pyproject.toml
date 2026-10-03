@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "e2em-local"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "Local E2EM service client; no inference dependencies"
+license = {text = "MIT"}
+readme = "README.md"
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["e2em*"]
+
+[tool.setuptools.package-data]
+e2em = ["*.json"]
+
+[project.urls]
+Homepage = "https://e2em.org"
+Repository = "https://github.com/E2EMorg/e2em"
+Documentation = "https://github.com/E2EMorg/e2em/blob/main/docs/SDK.md"
+Issues = "https://github.com/E2EMorg/e2em/issues"

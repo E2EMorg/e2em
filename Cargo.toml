@@ -1,0 +1,57 @@
+[workspace]
+members = ["crates/e2em-ffi", "crates/e2em-platform"]
+resolver = "3"
+
+[package]
+name = "e2em-runtime"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+default-run = "e2emd"
+description = "Local, private message assessment for E2EM applications"
+license = "MIT"
+repository = "https://github.com/E2EMorg/e2em"
+homepage = "https://e2em.org"
+readme = "README.md"
+
+[lib]
+name = "e2em_runtime"
+path = "src/lib.rs"
+
+[[bin]]
+name = "e2emd"
+path = "src/bin/e2emd.rs"
+required-features = ["runtime-service"]
+
+[[bin]]
+name = "e2em-resource-worker"
+path = "src/bin/e2em-resource-worker.rs"
+required-features = ["runtime-probes"]
+
+[features]
+default = ["runtime-service"]
+runtime-service = ["dep:tokio", "dep:rustix", "dep:getrandom", "dep:e2em-platform"]
+runtime-probes = []
+
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+e2em-platform = { version = "0.1.0", path = "crates/e2em-platform", optional = true }
+
+[dependencies]
+getrandom = { version = "0.4", optional = true }
+hmac = "0.12"
+schemars = "1"
+tokio = { version = "1", optional = true, features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
+rustix = { version = "1", optional = true, features = ["process", "net"] }
+clap = { version = "4.5", features = ["derive"] }
+regex = "1.13.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10.9"
+thiserror = "2.0"
+unicode-normalization = "0.1.25"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"

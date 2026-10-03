@@ -1,0 +1,87 @@
+name: Release runtime and SDKs
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 scripts/check_release.py --tag "$GITHUB_REF_NAME"
+
+  checks:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+
+  native:
+    needs: version
+    uses: ./.github/workflows/runtime-native.yml
+
+  packages:
+    needs: version
+    uses: ./.github/workflows/runtime-packages.yml
+
+  sdks:
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python3 -m pip install build
+      - run: python3 scripts/package_sdks.py --output dist/sdk
+      - name: Verify packaged Python SDK
+        run: |
+          python3 -m venv /tmp/e2em-sdk-check
+          /tmp/e2em-sdk-check/bin/pip install --no-deps dist/sdk/*.whl
+          cd /tmp
+          /tmp/e2em-sdk-check/bin/python -c 'from e2em import Client, BlockingClient; from e2em.schema import SCHEMA; assert SCHEMA["$defs"]["Assessment"]'
+      - name: Verify packaged Node SDK and types
+        run: |
+          PACKAGE=$(realpath dist/sdk/*.tgz)
+          CHECK_DIR=$(mktemp -d)
+          cd "$CHECK_DIR"
+          npm init -y
+          npm install "$PACKAGE"
+          node --input-type=module -e "import {Client} from '@e2em/local'; if (typeof Client.open !== 'function') process.exit(1)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2em-sdk-packages
+          path: dist/sdk/*
+          if-no-files-found: error
+
+  publish:
+    needs: [version, checks, native, packages, sdks]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          merge-multiple: true
+      - name: Verify installer metadata and write checksums
+        run: python3 scripts/check_release.py --tag "$GITHUB_REF_NAME" --assets dist/release
+      - name: Publish developer preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/release/* --verify-tag --prerelease --title "E2EM ${GITHUB_REF_NAME#v} — developer preview" --notes-file .github/RELEASE_NOTES.md

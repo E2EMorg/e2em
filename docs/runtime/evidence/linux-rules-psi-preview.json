@@ -1,0 +1,46 @@
+{
+  "platform": "Linux",
+  "kernel": "6.8.0-139-generic",
+  "architecture": "x86_64",
+  "backend": "rules-only / pii.email",
+  "model": "none",
+  "idle_timeout_seconds": 1,
+  "configured_default_seconds": 300,
+  "initial_unloaded_rss_kib": 9160,
+  "cycles": [
+    {
+      "ready_rss_kib": 24456,
+      "unloaded_rss_kib": 24456,
+      "idle_context_switch_delta": 1
+    },
+    {
+      "ready_rss_kib": 24460,
+      "unloaded_rss_kib": 24460,
+      "idle_context_switch_delta": 0
+    },
+    {
+      "ready_rss_kib": 24460,
+      "unloaded_rss_kib": 24460,
+      "idle_context_switch_delta": 1
+    }
+  ],
+  "cold_reload": {
+    "samples": 3,
+    "p50_ms": 8.40147997951135,
+    "p95_ms": 724.2575639975257
+  },
+  "warm_end_to_end": {
+    "samples": 150,
+    "p50_ms": 0.8837429923005402,
+    "p95_ms": 4.338925005868077
+  },
+  "energy_measurement": null,
+  "limits": "No contextual model or accelerator is loaded. RSS includes Tokio threads, regex cache and allocator retention. Energy counters and Windows/macOS measurements are unavailable. This run measures request/response latency, not a model release gate.",
+  "automatic_pressure_monitor": {
+    "source": "Linux PSI /proc/pressure/memory",
+    "trigger": "some 300000 2000000",
+    "registration": "executed successfully as unprivileged user",
+    "notifications": "EPOLLPRI path tested with synthetic urgent-data readiness; host memory pressure not induced",
+    "fallback": "one startup diagnostic plus idle eviction and SIGUSR1 when unavailable"
+  }
+}

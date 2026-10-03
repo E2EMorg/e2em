@@ -1,0 +1,185 @@
+{
+  "platform": "Linux",
+  "kernel": "6.8.0-139-generic",
+  "architecture": "x86_64",
+  "backend": "rules-only / pii.email",
+  "model": "none",
+  "idle_timeout_seconds": 1,
+  "configured_default_seconds": 300,
+  "initial_unloaded_rss_kib": 8904,
+  "cycles": [
+    {
+      "ready_rss_kib": 10180,
+      "unloaded_rss_kib": 10180,
+      "idle_context_switch_delta": 3,
+      "connected_unloaded_interval": {
+        "elapsed_seconds": 5.0051114250090905,
+        "cpu_seconds": 0.0,
+        "voluntary_context_switches": 0,
+        "involuntary_context_switches": 0,
+        "scheduled_timeslices": 0,
+        "threads_before": 4,
+        "threads_after": 4,
+        "energy": {
+          "elapsed_seconds": 5.0051114250090905,
+          "domains": {
+            "intel-rapl:0:0": {
+              "name": "core",
+              "joules": 50.888726,
+              "average_watts": 10.16735126928919
+            },
+            "intel-rapl:0": {
+              "name": "package-0",
+              "joules": 690.37868,
+              "average_watts": 137.93472739695224
+            }
+          }
+        }
+      },
+      "active_energy": {
+        "elapsed_seconds": 0.048197604017332196,
+        "domains": {
+          "intel-rapl:0:0": {
+            "name": "core",
+            "joules": 0.690852,
+            "average_watts": 14.333741564239682
+          },
+          "intel-rapl:0": {
+            "name": "package-0",
+            "joules": 7.036272,
+            "average_watts": 145.9880038325081
+          }
+        }
+      }
+    },
+    {
+      "ready_rss_kib": 10184,
+      "unloaded_rss_kib": 10184,
+      "idle_context_switch_delta": 2,
+      "connected_unloaded_interval": {
+        "elapsed_seconds": 5.005959784961306,
+        "cpu_seconds": 0.0,
+        "voluntary_context_switches": 0,
+        "involuntary_context_switches": 0,
+        "scheduled_timeslices": 0,
+        "threads_before": 4,
+        "threads_after": 4,
+        "energy": {
+          "elapsed_seconds": 5.005959784961306,
+          "domains": {
+            "intel-rapl:0:0": {
+              "name": "core",
+              "joules": 46.726572,
+              "average_watts": 9.334188448811355
+            },
+            "intel-rapl:0": {
+              "name": "package-0",
+              "joules": 684.262633,
+              "average_watts": 136.6895984773256
+            }
+          }
+        }
+      },
+      "active_energy": {
+        "elapsed_seconds": 0.03816895396448672,
+        "domains": {
+          "intel-rapl:0:0": {
+            "name": "core",
+            "joules": 0.458396,
+            "average_watts": 12.009655816779844
+          },
+          "intel-rapl:0": {
+            "name": "package-0",
+            "joules": 5.389553,
+            "average_watts": 141.20253347824428
+          }
+        }
+      }
+    },
+    {
+      "ready_rss_kib": 10184,
+      "unloaded_rss_kib": 10184,
+      "idle_context_switch_delta": 2,
+      "connected_unloaded_interval": {
+        "elapsed_seconds": 5.0067132280091755,
+        "cpu_seconds": 0.0,
+        "voluntary_context_switches": 0,
+        "involuntary_context_switches": 0,
+        "scheduled_timeslices": 0,
+        "threads_before": 4,
+        "threads_after": 4,
+        "energy": {
+          "elapsed_seconds": 5.0067132280091755,
+          "domains": {
+            "intel-rapl:0:0": {
+              "name": "core",
+              "joules": 47.326761,
+              "average_watts": 9.452660626783809
+            },
+            "intel-rapl:0": {
+              "name": "package-0",
+              "joules": 693.205026,
+              "average_watts": 138.45510905677332
+            }
+          }
+        }
+      },
+      "active_energy": {
+        "elapsed_seconds": 0.062480441003572196,
+        "domains": {
+          "intel-rapl:0:0": {
+            "name": "core",
+            "joules": 0.617964,
+            "average_watts": 9.890519178068367
+          },
+          "intel-rapl:0": {
+            "name": "package-0",
+            "joules": 8.897962,
+            "average_watts": 142.4119589599452
+          }
+        }
+      }
+    }
+  ],
+  "cold_reload": {
+    "samples": 3,
+    "p50_ms": 1.8062699818983674,
+    "p95_ms": 12.751244008541107
+  },
+  "warm_end_to_end": {
+    "samples": 150,
+    "p50_ms": 0.7408339879475534,
+    "p95_ms": 1.2946879724040627
+  },
+  "initial_connected_unloaded_interval": {
+    "elapsed_seconds": 5.005294555972796,
+    "cpu_seconds": 0.0,
+    "voluntary_context_switches": 2,
+    "involuntary_context_switches": 0,
+    "scheduled_timeslices": 2,
+    "threads_before": 4,
+    "threads_after": 4,
+    "energy": {
+      "elapsed_seconds": 5.005294555972796,
+      "domains": {
+        "intel-rapl:0:0": {
+          "name": "core",
+          "joules": 52.820419,
+          "average_watts": 10.552909206306277
+        },
+        "intel-rapl:0": {
+          "name": "package-0",
+          "joules": 691.75042,
+          "average_watts": 138.2037385141574
+        }
+      }
+    }
+  },
+  "energy_measurement": {
+    "source": "Intel RAPL cumulative counters",
+    "scope": "whole CPU domains on a shared host; overlapping domains are not summed",
+    "counter_access": "explicit read-only offline container",
+    "process_attribution": false
+  },
+  "limits": "No contextual model or accelerator is loaded. RSS includes Tokio threads, regex cache and allocator retention. When enabled, energy is measured for whole CPU domains, including unrelated host work and measurement overhead, and is not attributable to this process. Context switches and scheduled timeslices are wakeup proxies, not interrupt tracing. Windows/macOS measurements are unavailable. This run measures request/response latency, not a model release gate."
+}

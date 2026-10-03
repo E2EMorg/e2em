@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 scripts/check_release.py
+      - run: cargo fmt --all -- --check
+      - run: cargo build --locked --workspace --all-features
+      - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --locked --workspace --all-features
+
+      - run: E2EM_FFI_LIBRARY=target/debug/libe2em_ffi.so E2EM_ASAN=1 python3 -m unittest discover -s tests -p test_runtime_ffi.py -v
+      - run: node --test sdk/node/test.mjs
+      - run: npx --yes --package typescript@5.9.3 tsc --strict --noEmit --module nodenext --moduleResolution nodenext --target ES2022 sdk/node/typecheck.ts
+      - run: |
+          cargo run --locked --example export_runtime_schema
+          python3 scripts/generate_runtime_bindings.py
+          git diff --exit-code -- docs/runtime/schemas sdk/node/contract.d.ts sdk/node/response.schema.json sdk/python/e2em/types.py sdk/python/e2em/response.schema.json
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m compileall -q scripts tests sdk/python
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'

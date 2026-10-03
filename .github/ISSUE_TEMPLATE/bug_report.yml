@@ -1,0 +1,22 @@
+name: Runtime or SDK bug
+description: Report a reproducible problem using synthetic messages.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Runtime / SDK version
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and architecture
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps and expected / actual result
+      description: Include commands and fixed error codes. Omit credentials and real message contents.
+    validations:
+      required: true
