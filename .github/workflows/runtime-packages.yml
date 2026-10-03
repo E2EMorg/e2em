@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      E2EM_MODEL_SIGNING_KEY:
+        required: true
 
 permissions:
   contents: read
@@ -19,7 +22,30 @@ defaults:
     shell: bash
 
 jobs:
+  model:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+      - run: python3 -m pip install transformers==5.17.0 safetensors onnx==1.20.1 onnxruntime==1.24.4 cryptography
+      - name: Export, compare and sign Gandalf
+        env:
+          E2EM_MODEL_SIGNING_KEY: ${{ secrets.E2EM_MODEL_SIGNING_KEY }}
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+        run: python3 scripts/build_gandalf_package.py --output dist/gandalf
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gandalf-deployment
+          path: dist/gandalf/gandalf-*
+          if-no-files-found: error
+
   linux:
+    needs: model
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -30,23 +56,48 @@ jobs:
         with:
           targets: x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: gandalf-deployment
+          path: dist/gandalf
+      - run: python -m pip install onnxruntime==1.24.4
+      - run: python -c 'import zipfile; zipfile.ZipFile("dist/gandalf/gandalf-0.0.1-package.zip").extractall("dist/gandalf/package")'
       - run: sudo apt-get update && sudo apt-get install -y rpm musl-tools
+      - run: python3 -m pip install ziglang==0.14.1
+      - run: cargo install cargo-zigbuild --locked
+      - run: rustup target add x86_64-unknown-linux-gnu
+      - run: cargo zigbuild --locked --release -p e2em-inference --target x86_64-unknown-linux-gnu.2.28
+      - run: python3 scripts/stage_inference.py --worker target/x86_64-unknown-linux-gnu/release/e2em-inference --output dist/inference
       - run: python3 -m unittest discover -s tests -p 'test_runtime_packaging.py'
       - run: cargo build --locked --release --features runtime-service --bin e2emd --target x86_64-unknown-linux-musl
+      - run: python3 scripts/package_update.py --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime
       - name: Build packages and upgrade fixtures
         run: |
           UPGRADE_VERSION=$(python3 -c 'import tomllib; v=tomllib.load(open("Cargo.toml","rb"))["package"]["version"].split("."); v[2]=str(int(v[2])+1); print(".".join(v))')
           for format in deb rpm; do
-            python3 scripts/package_runtime.py --format "$format" --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime
-            python3 scripts/package_runtime.py --format "$format" --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/upgrade --version "$UPGRADE_VERSION"
+            python3 scripts/package_runtime.py --format "$format" --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime --inference-dir dist/inference
+            python3 scripts/package_runtime.py --format "$format" --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/upgrade --version "$UPGRADE_VERSION" --inference-dir dist/inference
           done
+      - name: Build offline packages
+        run: |
+          for format in deb rpm; do
+            python3 scripts/package_runtime.py --format "$format" --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
+          done
+      - name: Qualify native Gandalf
+        run: python3 scripts/check_gandalf_runtime.py --binary target/x86_64-unknown-linux-musl/release/e2emd --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.so --package dist/gandalf/package --output dist/reports/gandalf-linux.json
       - name: Native Debian package lifecycle
         run: |
           mkdir -p dist/reports
-          docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" debian:bookworm bash -lc 'apt-get update -qq && apt-get install -y python3 && python3 /work/scripts/check_runtime_package.py --format deb --package /work/dist/runtime/*.deb --upgrade-package /work/dist/upgrade/*.deb --output /reports/deb.json'
+          docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" debian:bookworm bash -lc 'apt-get update -qq && apt-get install -y python3 libstdc++6 && python3 /work/scripts/check_runtime_package.py --format deb --package /work/dist/runtime/*offline*.deb --upgrade-package /work/dist/upgrade/*.deb --output /reports/deb.json'
+      - name: Native normal Debian lifecycle
+        run: |
+          docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" debian:bookworm bash -lc 'apt-get update -qq && apt-get install -y python3 libstdc++6 && python3 /work/scripts/check_runtime_package.py --format deb --package /work/dist/runtime/*[0-9]-x86*.deb --upgrade-package /work/dist/upgrade/*.deb --model-source /work/dist/gandalf/package --output /reports/deb-normal.json'
       - name: Native Fedora package lifecycle
         run: |
-          docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" fedora:43 bash -lc 'dnf install -y python3 rpm && python3 /work/scripts/check_runtime_package.py --format rpm --package /work/dist/runtime/*.rpm --upgrade-package /work/dist/upgrade/*.rpm --output /reports/rpm.json'
+          docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" fedora:43 bash -lc 'dnf install -y python3 rpm && python3 /work/scripts/check_runtime_package.py --format rpm --package /work/dist/runtime/*offline*.rpm --upgrade-package /work/dist/upgrade/*.rpm --output /reports/rpm.json'
+      - name: Native normal Fedora lifecycle
+        run: |
+          docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" fedora:43 bash -lc 'dnf install -y python3 rpm && python3 /work/scripts/check_runtime_package.py --format rpm --package /work/dist/runtime/*[0-9]-x86*.rpm --upgrade-package /work/dist/upgrade/*.rpm --model-source /work/dist/gandalf/package --output /reports/rpm-normal.json'
       - name: Build native C SDK
         run: |
           cargo build --locked --release -p e2em-ffi
@@ -61,6 +112,7 @@ jobs:
           if-no-files-found: error
 
   windows:
+    needs: model
     runs-on: windows-2022
     env:
       DOTNET_ROLL_FORWARD: Major
@@ -76,19 +128,36 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: gandalf-deployment
+          path: dist/gandalf
+      - run: python -m pip install onnxruntime==1.24.4
+      - run: python -c 'import zipfile; zipfile.ZipFile("dist/gandalf/gandalf-0.0.1-package.zip").extractall("dist/gandalf/package")'
       - run: dotnet tool install --global wix --version 4.0.6
       - run: wix --version
       - run: python -m unittest discover -s tests -p 'test_runtime_packaging.py'
       - run: cargo build --locked --release --features runtime-service --bin e2emd --target x86_64-pc-windows-msvc
         env:
           RUSTFLAGS: '-C target-feature=+crt-static'
+      - run: cargo build --locked --release -p e2em-inference --target x86_64-pc-windows-msvc
+        env:
+          RUSTFLAGS: '-C target-feature=+crt-static'
+      - run: python scripts/stage_inference.py --worker target/x86_64-pc-windows-msvc/release/e2em-inference.exe --output dist/inference
+      - name: Stage background update payload
+        run: python scripts/package_update.py --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime
       - name: Build MSI and upgrade fixture
         run: |
           UPGRADE_VERSION=$(python -c 'import tomllib; v=tomllib.load(open("Cargo.toml","rb"))["package"]["version"].split("."); v[2]=str(int(v[2])+1); print(".".join(v))')
-          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime
-          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/upgrade --version "$UPGRADE_VERSION"
+          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime --inference-dir dist/inference
+          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/upgrade --version "$UPGRADE_VERSION" --inference-dir dist/inference
+      - run: python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
+      - name: Qualify native Gandalf
+        run: python scripts/check_gandalf_runtime.py --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --worker dist/inference/e2em-inference.exe --library dist/inference/onnxruntime.dll --package dist/gandalf/package --output dist/reports/gandalf-windows.json
       - name: Native MSI lifecycle
-        run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*.msi --upgrade-package dist/upgrade/*.msi --output dist/reports/msi.json
+        run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*offline*.msi --upgrade-package dist/upgrade/*.msi --output dist/reports/msi.json
+      - name: Native normal MSI lifecycle
+        run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*[0-9]-x86*.msi --upgrade-package dist/upgrade/*.msi --model-source dist/gandalf/package --output dist/reports/msi-normal.json
       - name: Build native C SDK
         run: |
           cargo build --locked --release -p e2em-ffi --target x86_64-pc-windows-msvc
@@ -105,6 +174,7 @@ jobs:
           if-no-files-found: error
 
   macos:
+    needs: model
     strategy:
       fail-fast: false
       matrix:
@@ -123,17 +193,34 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: gandalf-deployment
+          path: dist/gandalf
+      - run: python -m pip install onnxruntime==1.24.4
+      - run: python -c 'import zipfile; zipfile.ZipFile("dist/gandalf/gandalf-0.0.1-package.zip").extractall("dist/gandalf/package")'
       - run: python3 -m unittest discover -s tests -p 'test_runtime_packaging.py'
       - run: cargo build --locked --release --features runtime-service --bin e2emd --target ${{ matrix.target }}
+      - run: cargo build --locked --release -p e2em-inference --target ${{ matrix.target }}
+      - run: python3 scripts/stage_inference.py --worker target/${{ matrix.target }}/release/e2em-inference --output dist/inference
+      - name: Stage background update payload
+        env:
+          TARGET: ${{ matrix.target }}
+        run: python3 scripts/package_update.py --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/runtime
       - name: Build PKG and upgrade fixture
         env:
           TARGET: ${{ matrix.target }}
         run: |
           UPGRADE_VERSION=$(python3 -c 'import tomllib; v=tomllib.load(open("Cargo.toml","rb"))["package"]["version"].split("."); v[2]=str(int(v[2])+1); print(".".join(v))')
-          python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/runtime
-          python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/upgrade --version "$UPGRADE_VERSION"
+          python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/runtime --inference-dir dist/inference
+          python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/upgrade --version "$UPGRADE_VERSION" --inference-dir dist/inference
+      - run: python3 scripts/package_runtime.py --format pkg --target ${{ matrix.target }} --binary target/${{ matrix.target }}/release/e2emd --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
+      - name: Qualify native Gandalf
+        run: python3 scripts/check_gandalf_runtime.py --binary target/${{ matrix.target }}/release/e2emd --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.dylib --package dist/gandalf/package --output dist/reports/gandalf-${{ matrix.target }}.json
       - name: Native PKG lifecycle
-        run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*.pkg --upgrade-package dist/upgrade/*.pkg --output "dist/reports/pkg-${{ matrix.target }}.json"
+        run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*offline*.pkg --upgrade-package dist/upgrade/*.pkg --output "dist/reports/pkg-${{ matrix.target }}.json"
+      - name: Native normal PKG lifecycle
+        run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*[0-9]-${{ matrix.target }}.pkg --upgrade-package dist/upgrade/*.pkg --model-source dist/gandalf/package --output "dist/reports/pkg-normal-${{ matrix.target }}.json"
       - name: Build native C SDK
         env:
           TARGET: ${{ matrix.target }}

@@ -2,8 +2,7 @@
 
 The build produces `e2em-runtime-VERSION-TARGET.{msi,pkg,deb,rpm}` plus SHA-256
 checksums and JSON metadata. Version comes from `Cargo.toml`. These are unsigned
-developer-preview release artifacts. No models, grants,
-credentials or diagnostic workers are included. Runtime inference needs no Python;
+release artifacts. Normal installers include the native inference worker and CPU ONNX Runtime. Offline variants (`e2em-runtime-VERSION-offline-TARGET`) also include verified Gandalf assets. No grants or credentials are included. Runtime inference needs no Python;
 Unix user setup requires Python 3.11+. No package script starts a root service or
 enrols applications automatically.
 
@@ -41,6 +40,11 @@ $Package = Join-Path $env:LOCALAPPDATA 'E2EM Runtime'
 Package-managed setup references the installed executable rather than copying
 it. Stop the runtime before upgrades and restart afterward so the new executable
 is used. Package replacement preserves the private user grants and credentials.
+User setup enables [idle background updates](UPDATING.md) by default. Verified
+runtime payloads run from the private per-user update directory under a restart
+supervisor; package-owned files and installer receipts remain intact. SDKs and
+model updates use a separate signed descriptor. Pass `--no-auto-update` to Unix setup or
+`-NoAutoUpdate` to Windows setup to disable this behavior.
 MSI uses a stable UpgradeCode and major-upgrade handling; Debian and RPM use the
 stable `e2em-runtime` name; PKG uses `org.e2em.runtime`. Do not mix a previous
 source-copy installation with package-managed setup: stop/uninstall the previous
@@ -61,13 +65,12 @@ Use the native platform and an executable built for the selected target:
 
 ```sh
 cargo build --locked --release --features runtime-service --bin e2emd --target x86_64-unknown-linux-musl
-python3 scripts/package_runtime.py --format deb --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime
-python3 scripts/package_runtime.py --format rpm --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime
+python3 scripts/package_runtime.py --format deb --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime --inference-dir dist/inference
+python3 scripts/package_runtime.py --format rpm --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime --inference-dir dist/inference
 ```
 
 Install the Rust target first. Linux tooling: `dpkg-deb` and `rpmbuild`.
-Linux packages use musl-static binaries so they do not accidentally inherit the
-CI host's glibc baseline. The initial Linux CI target is x86_64; arm64 staging is
+The Linux daemon is musl-static. Its separate inference worker is built for glibc 2.28; the CPU ONNX Runtime library needs glibc 2.27+ and libstdc++. The initial Linux CI target is x86_64; arm64 staging is
 supported but not an advertised tested build. macOS builds separate Intel and
 Apple Silicon PKGs using `pkgbuild`. Windows builds x64 MSI using WiX 4.0.6
 (`dotnet tool install --global wix --version 4.0.6`). Pass the corresponding
@@ -85,10 +88,12 @@ build host has only .NET 8 installed.
 `.github/workflows/runtime-packages.yml` builds and lifecycle-tests native packages.
 Tagged releases additionally run service conformance and SDK tests before publishing
 installers, SDK archives, checksums and native reports through GitHub Releases.
+The same native jobs stage standalone update payloads; release validation checks
+their target executable format and includes all four host builds in `SHA256SUMS`.
 See [release procedure](../RELEASING.md). Packages include the MIT license.
 
 Checksums establish byte integrity, not publisher authenticity. Signing and
-notarization remain future distribution milestones; preview artifacts are unsigned.
+notarization remain future distribution milestones; installer artifacts are unsigned. Model manifests are separately Ed25519 signed.
 Native test execution is reported by each release's workflow and attached reports.
 
 Local Debian and Fedora install/upgrade/remove evidence is recorded in
@@ -97,3 +102,5 @@ the 18 live service/SDK tests. These results do not qualify Windows or macOS.
 References: [WiX Package](https://docs.firegiant.com/wix/schema/wxs/package/),
 [Apple managed installs](https://developer.apple.com/library/archive/documentation/DeveloperTools/Conceptual/SoftwareDistribution4/Managed_Installs/Managed_Installs.html),
 [RPM dependency generation](https://rpm.org/docs/6.0.x/manual/dependency_generators.html).
+
+The release pipeline exports Gandalf once with PyTorch/ONNX parity checks, signs its manifest using `E2EM_MODEL_SIGNING_KEY`, stages matching native backends with `stage_inference.py`, then builds both installer variants. Offline lifecycle gates import the bundled model before completing setup. Native model qualification separately exercises every applicable default, custom selection, failure recovery and token coverage. See [model format and controls](MODELS.md).

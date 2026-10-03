@@ -1,7 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import {Client,E2EMError,utf16Span,validateAssessment} from './index.js';
+import {Client,E2EMError,utf16Span,validateAssessment,assess,presets} from './index.js';
+import {messageRequest} from './message.js';
+import path from 'node:path';
 import net from 'node:net';
 import {EventEmitter} from 'node:events';
 const cases = JSON.parse(await fs.readFile(new URL('../../tests/conformance/assessments.json',import.meta.url),'utf8'));
@@ -22,7 +24,46 @@ test('unserializable requests fail with typed errors', async()=>{
 test('malformed and stale assessments never allow' ,()=>{
  assert.throws(()=>validateAssessment({status:'error',action:'allow'},cases[0].request),E2EMError);
 });
+test('message-only defaults cover every preset, optional context, and custom text',()=>{
+ const draft = messageRequest('🙂 Original draft');
+ assert.deepEqual(draft.policy.rules.map(rule=>rule.category),presets.map(preset=>preset.id));
+ assert(draft.policy.rules.every(rule=>rule.context_requirement === (rule.category === 'spam.repeat' ? 'supplied_window' : 'target_only')));
+ const contextual = messageRequest('🙂 Original draft',{context:['Earlier message','Reply'],customPolicies:'Keep project details private.'});
+ assert.equal(contextual.policy.rules.length,presets.length+1);
+ assert.deepEqual(contextual.context.map(turn=>turn.text),['Earlier message','Reply']);
+ assert.equal(contextual.policy.rules.at(-1).policy_text,'Keep project details private.');
+ const custom = messageRequest('Hello',{policies:[],customPolicies:'Custom text',context:'Earlier message'});
+ assert.equal(custom.policy.rules.length,1);
+ assert.equal(custom.policy.rules[0].match,'policy_text');
+ assert.throws(()=>messageRequest('Hello',{context:[42]}));
+});
 if (process.argv.includes('--live')) {
+ test('message API loads app settings, uses defaults, and preserves draft snapshots',async()=>{
+  const socketPath = process.argv[process.argv.indexOf('--live')+1];
+  const configPath = path.join(path.dirname(socketPath),'node-message-app.json');
+  await fs.writeFile(configPath,JSON.stringify({socket_path:socketPath,principal:'node',secret:'b'.repeat(64),provider:'test-provider'}),{mode:0o600});
+  try {
+   const report = await assess('Hello',{app:'node',configPath});
+   assert.equal(report.request.policy.rules.length,presets.length);
+   assert.equal(report.status,'indeterminate');
+   assert.deepEqual(report.unevaluated,presets.filter(preset=>preset.directions.includes('outgoing') && preset.id !== 'pii.email').map(preset=>preset.id));
+   const client = await Client.connect({app:'node',configPath});
+   try {
+    const selected = await client.assess('Contact alex@example.test',{policies:'pii.email',context:'Earlier message'});
+    assert.equal(selected.action,'warn');
+    assert(selected.appliesTo(selected.request));
+    const edited = structuredClone(selected.request); edited.context[0].text = 'Changed context';
+    assert(!selected.appliesTo(edited));
+    const custom = await client.assess('Hello',{policies:[],customPolicies:'Keep project details private.',context:['Earlier message']});
+    assert.equal(custom.status,'indeterminate');
+    assert.deepEqual(custom.unevaluated,['custom-1']);
+    assert.deepEqual(custom.scores,{});
+    assert(!JSON.stringify(custom).includes('Keep project details private.'));
+   } finally {client.close();}
+   await fs.chmod(configPath,0o644);
+   await assert.rejects(Client.connect({app:'node',configPath}),E2EMError);
+  } finally {await fs.unlink(configPath);}
+ });
  test('Windows pipe adapter restricts names and preserves authentication',async()=>{
   const platform = Object.getOwnPropertyDescriptor(process,'platform');
   const connect = net.createConnection;

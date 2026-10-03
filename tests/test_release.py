@@ -19,6 +19,7 @@ class ReleaseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ("Cargo.toml", "crates/e2em-ffi/Cargo.toml", "crates/e2em-platform/Cargo.toml",
+                         "crates/e2em-inference/Cargo.toml",
                          "sdk/python/pyproject.toml", "sdk/node/package.json"):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)

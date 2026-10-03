@@ -71,7 +71,7 @@ fn rejects_unknown_fields_and_invalid_request_bounds() {
             0 => r.message.text.clear(),
             1 => r.message.text = "a".repeat(16385),
             2 => r.request_id.clear(),
-            3 => r.options.deadline_ms = 5001,
+            3 => r.options.deadline_ms = 30001,
             4 => r.api_version = "2".into(),
             5 => r.context.push(Turn {
                 id: r.message.id.clone(),
@@ -170,13 +170,13 @@ fn unavailable_detectors_are_reported_and_invalid_scores_review() {
     }
 }
 #[test]
-fn custom_and_contextual_blocking_are_rejected() {
+fn custom_text_is_accepted_but_contextual_blocking_is_rejected() {
     let mut p = policy();
     let rule = &mut p.rules[0];
     rule.category = None;
     rule.policy_text = Some("a custom rule".into());
     rule.r#match = Match::PolicyText;
-    assert_eq!(validate_policy(&p), Err(ErrorCode::UnsupportedPolicy));
+    assert_eq!(validate_policy(&p), Ok(()));
     p.rules[0].action = Action::Block;
     assert_eq!(validate_policy(&p), Err(ErrorCode::InvalidPolicy));
     let mut p = policy();
@@ -312,7 +312,203 @@ fn scheduler_forwards_named_category_support_and_model_identity() {
     assert_eq!(result.action, Action::Review);
     assert_eq!(result.findings[0].score, Some(0.6));
     assert_eq!(scheduler.capabilities().model, "experimental-test-model");
-    assert_eq!(scheduler.capabilities().custom_policies, "none");
+    assert_eq!(scheduler.capabilities().custom_policies, "report-only");
+}
+
+#[test]
+fn message_only_uses_every_default_preset_and_reports_missing_backends() {
+    use e2em_runtime::runtime::presets::{self, CheckOptions};
+    let request = presets::request("Hello", CheckOptions::default());
+    let policy = request.policy.as_ref().unwrap();
+    assert_eq!(policy.rules.len(), presets::all().len());
+    assert_eq!(presets::all().len(), 40);
+    let report = Engine::default().assess("app", &request);
+    assert_eq!(report.status, Status::Indeterminate);
+    assert_eq!(report.error_code, None);
+    assert_eq!(report.action, Action::Review);
+    assert_eq!(
+        report.coverage.unevaluated_rules.len(),
+        presets::all()
+            .iter()
+            .filter(|preset| preset.directions.contains(&Direction::Outgoing)
+                && preset.id != "pii.email")
+            .count()
+    );
+    let selected = Engine::default().check_with(
+        "Hello",
+        CheckOptions {
+            policies: Some(vec!["pii.email".into()]),
+            ..Default::default()
+        },
+    );
+    assert_eq!(selected.status, Status::Assessed);
+    assert_eq!(selected.action, Action::Allow);
+}
+
+#[test]
+fn default_model_presets_and_custom_text_share_one_batch_with_optional_context() {
+    use e2em_runtime::runtime::presets::{self, CheckOptions};
+    use std::sync::{Arc, Mutex};
+    type Batch = (String, Option<String>, Vec<String>);
+    struct BatchModel(Arc<Mutex<Vec<Batch>>>);
+    impl PolicyScorer for BatchModel {
+        fn supports_model_categories(&self) -> bool {
+            true
+        }
+        fn supports_custom_policies(&self) -> bool {
+            true
+        }
+        fn model_version(&self) -> String {
+            "all-preset-test-model".into()
+        }
+        fn score(&self, _: &str, _: Option<&str>, _: &str) -> Result<f64, BackendError> {
+            panic!("Model presets should use the batch operation")
+        }
+        fn score_many(
+            &self,
+            message: &str,
+            context: Option<&str>,
+            policies: &[String],
+        ) -> Result<Vec<f64>, BackendError> {
+            self.0.lock().unwrap().push((
+                message.into(),
+                context.map(str::to_string),
+                policies.to_vec(),
+            ));
+            Ok(vec![0.0; policies.len()])
+        }
+    }
+    for context in [
+        vec![],
+        vec!["Prior message".into(), "Another message".into()],
+    ] {
+        let calls = Arc::new(Mutex::new(vec![]));
+        let engine = Engine::new(BatchModel(calls.clone()));
+        let report = engine.check_with(
+            "🙂 Original message",
+            CheckOptions {
+                context: context.clone(),
+                custom_policies: vec!["Do not discuss a former partner.".into()],
+                ..Default::default()
+            },
+        );
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "🙂 Original message");
+        assert_eq!(
+            calls[0].1,
+            (!context.is_empty()).then(|| context.join("\n"))
+        );
+        let wordings: Vec<_> = presets::all()
+            .iter()
+            .filter(|preset| {
+                preset.id != "pii.email"
+                    && (preset.id != "spam.repeat" || !context.is_empty())
+                    && preset.directions.contains(&Direction::Outgoing)
+            })
+            .map(|preset| preset.wording.clone())
+            .chain(std::iter::once("Do not discuss a former partner.".into()))
+            .collect();
+        assert_eq!(calls[0].2, wordings);
+        assert_eq!(report.error_code, None);
+        assert_eq!(report.findings.len(), wordings.len());
+        assert!(
+            report
+                .findings
+                .iter()
+                .all(|finding| finding.score == Some(0.0))
+        );
+        assert_eq!(report.findings.last().unwrap().method, Method::CustomPolicy);
+        assert_eq!(report.versions.model, "all-preset-test-model");
+        assert!(report.coverage.unevaluated_rules.len() < 39);
+    }
+}
+
+#[test]
+fn custom_only_policy_text_is_scored_by_the_scheduler() {
+    struct CustomModel;
+    impl PolicyScorer for CustomModel {
+        fn supports_custom_policies(&self) -> bool {
+            true
+        }
+        fn score(
+            &self,
+            message: &str,
+            context: Option<&str>,
+            policy: &str,
+        ) -> Result<f64, BackendError> {
+            assert_eq!(message, "Original draft");
+            assert_eq!(context, Some("Prior message"));
+            assert_eq!(policy, "Keep project details private.");
+            Ok(0.6)
+        }
+        fn action_threshold(&self, _: &str) -> Option<f64> {
+            Some(0.7)
+        }
+    }
+    let scheduler = Scheduler::with_factory(Duration::from_secs(300), || Ok(Box::new(CustomModel)));
+    let report = scheduler
+        .check_with(
+            "Original draft",
+            presets::CheckOptions {
+                policies: Some(vec![]),
+                context: vec!["Prior message".into()],
+                custom_policies: vec!["Keep project details private.".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .wait()
+        .unwrap();
+    assert_eq!(report.status, Status::Assessed);
+    assert_eq!(report.action, Action::Allow);
+    assert_eq!(report.findings[0].method, Method::CustomPolicy);
+    assert_eq!(report.findings[0].score, Some(0.6));
+    assert_eq!(scheduler.capabilities().custom_policies, "supported");
+}
+
+#[test]
+fn capabilities_remain_responsive_while_a_model_is_scoring() {
+    use std::sync::{Arc, Mutex, mpsc};
+    struct WaitingModel {
+        started: mpsc::Sender<()>,
+        release: Mutex<mpsc::Receiver<()>>,
+    }
+    impl PolicyScorer for WaitingModel {
+        fn supports_model_categories(&self) -> bool {
+            true
+        }
+        fn model_version(&self) -> String {
+            "waiting-model".into()
+        }
+        fn score(&self, _: &str, _: Option<&str>, _: &str) -> Result<f64, BackendError> {
+            self.started.send(()).unwrap();
+            self.release.lock().unwrap().recv().unwrap();
+            Ok(0.0)
+        }
+    }
+    let (started, observed) = mpsc::channel();
+    let (release, waiting) = mpsc::channel();
+    let waiting = Mutex::new(Some(waiting));
+    let scheduler = Arc::new(Scheduler::with_factory(
+        Duration::from_secs(300),
+        move || {
+            Ok(Box::new(WaitingModel {
+                started: started.clone(),
+                release: Mutex::new(waiting.lock().unwrap().take().unwrap()),
+            }))
+        },
+    ));
+    let pending = scheduler.submit("app", model_request()).unwrap();
+    observed.recv_timeout(Duration::from_secs(1)).unwrap();
+    let (reply, receive) = mpsc::channel();
+    let observer = scheduler.clone();
+    let thread = std::thread::spawn(move || reply.send(observer.capabilities()).unwrap());
+    let capabilities = receive.recv_timeout(Duration::from_secs(1));
+    release.send(()).unwrap();
+    thread.join().unwrap();
+    assert_eq!(capabilities.unwrap().model, "waiting-model");
+    assert_eq!(pending.wait().unwrap().findings[0].score, Some(0.0));
 }
 
 #[test]
@@ -634,7 +830,7 @@ fn request_options_have_individual_defaults() {
     let mut value = serde_json::to_value(request()).unwrap();
     value["options"] = serde_json::json!({"include_spans":true});
     let request: Request = serde_json::from_value(value).unwrap();
-    assert_eq!(request.options.deadline_ms, 1000);
+    assert_eq!(request.options.deadline_ms, 15000);
     assert!(request.options.include_spans);
 }
 

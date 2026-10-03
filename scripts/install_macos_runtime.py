@@ -9,16 +9,18 @@ import secrets
 import shutil
 import uuid
 
-from install_runtime import atomic_json, private_dir
+from install_runtime import atomic_json, private_dir, remove_updates
+from setup_models import arguments as model_arguments, provision, remove_models
 
 LABEL = "org.e2em.runtime"
 
 
-def launch_agent(binary, socket, grants, label=LABEL, idle_seconds=300):
+def launch_agent(binary, socket, grants, label=LABEL, idle_seconds=300, auto_update=True):
     return {
         "Label": label,
         "ProgramArguments": [str(binary), "--socket", str(socket), "--grants",
-                             str(grants), "--idle-seconds", str(idle_seconds)],
+                             str(grants), *(["--auto-update"] if auto_update else []),
+                             "--idle-seconds", str(idle_seconds)],
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},
         "ProcessType": "Background",
@@ -34,8 +36,11 @@ def main(argv=None):
     install = sub.add_parser("install")
     install.add_argument("--binary", type=Path, required=True)
     install.add_argument("--use-packaged-binary", action="store_true")
+    install.add_argument("--no-auto-update", action="store_true")
+    model_arguments(install)
     for command in ("enrol", "revoke"):
-        sub.add_parser(command).add_argument("principal")
+        action = sub.add_parser(command); action.add_argument("principal")
+        if command == "enrol": action.add_argument("--model-management", action="store_true")
     sub.add_parser("uninstall")
     args = parser.parse_args(argv)
     home = args.home.absolute()
@@ -61,11 +66,15 @@ def main(argv=None):
         agent.parent.mkdir(parents=True, exist_ok=True)
         with agent.open("xb") as output:
             os.chmod(agent, 0o600)
-            plistlib.dump(launch_agent(packaged or binary, socket, config / "grants.json"), output)
+            configuration = launch_agent(packaged or binary, socket, config / "grants.json", auto_update=not (args.no_auto_update or args.offline))
+            if args.rules_only: configuration['ProgramArguments'].append('--rules-only')
+            if args.offline: configuration['ProgramArguments'].append('--offline')
+            plistlib.dump(configuration, output)
         atomic_json(config / "grants.json", {"provider": "project-" + uuid.uuid4().hex,
                                             "grants": []})
         atomic_json(config / "installation.json", {"version": 1, "platform": "macos", **({"packaged_binary": str(packaged)} if packaged else {})})
-        print(f"Installed prototype. Start with: launchctl bootstrap gui/{os.getuid()} {agent}")
+        provision(args, packaged or binary, config)
+        print(f"Installed. Start with: launchctl bootstrap gui/{os.getuid()} {agent}")
         return
     private_dir(config)
     private_dir(runtime)
@@ -96,6 +105,8 @@ def main(argv=None):
             managed.append(binary)
         for path in managed:
             path.unlink()
+        remove_updates(config)
+        remove_models(config)
         for path in (config, runtime):
             if not any(path.iterdir()):
                 path.rmdir()
@@ -114,6 +125,7 @@ def main(argv=None):
     if len(grants["grants"]) >= 64:
         raise ValueError("grant limit reached")
     grant = {"principal": args.principal, "uid": os.getuid(), "secret": secrets.token_hex(32)}
+    if args.model_management: grant['model_management'] = True
     grants["grants"].append(grant)
     atomic_json(grants_path, grants)
     private_dir(config / "apps")

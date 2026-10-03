@@ -33,6 +33,7 @@ jobs:
   packages:
     needs: version
     uses: ./.github/workflows/runtime-packages.yml
+    secrets: inherit
 
   sdks:
     needs: version
@@ -77,10 +78,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist/downloads
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install cryptography
       - name: Verify installer metadata and write checksums
         run: python3 scripts/check_release.py --tag "$GITHUB_REF_NAME" --downloads dist/downloads --assets dist/release
-      - name: Publish developer preview
+      - name: Publish stable runtime and SDKs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/release/* --verify-tag --prerelease --title "E2EM ${GITHUB_REF_NAME#v} — developer preview" --notes-file .github/RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" dist/release/* --verify-tag --title "E2EM ${GITHUB_REF_NAME#v}" --notes-file .github/RELEASE_NOTES.md

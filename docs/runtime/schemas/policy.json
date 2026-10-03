@@ -134,6 +134,9 @@
           "format": "uint",
           "minimum": 0
         },
+        "model_thresholds": {
+          "type": "boolean"
+        },
         "policy_text": {
           "type": [
             "string",

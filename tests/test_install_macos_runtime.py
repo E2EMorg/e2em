@@ -5,9 +5,11 @@ import plistlib
 import sys
 import tempfile
 import unittest
+import sys
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("install_macos_runtime", ROOT / "scripts/install_macos_runtime.py")
 module = importlib.util.module_from_spec(spec)
@@ -22,19 +24,19 @@ class MacInstall(unittest.TestCase):
             source = home / "source"
             source.write_bytes(b"binary fixture")
             prefix = ["--home", str(home)]
-            module.main([*prefix, "install", "--binary", str(source)])
+            module.main([*prefix, "install", "--rules-only", "--binary", str(source)])
             agent = home / "Library/LaunchAgents/org.e2em.runtime.plist"
             value = plistlib.loads(agent.read_bytes())
             self.assertEqual(value["ProgramArguments"][0], str(home / ".local/bin/e2emd"))
             self.assertEqual(value["ProgramArguments"][2], str(home / "Library/Caches/e2em/runtime.sock"))
-            self.assertEqual(value["ProgramArguments"][-1], "300")
+            self.assertEqual(value["ProgramArguments"][value["ProgramArguments"].index("--idle-seconds") + 1], "300")
             self.assertNotIn("StartInterval", value)
             self.assertEqual(agent.stat().st_mode & 0o777, 0o600)
             config = home / ".config/e2em"
             runtime = home / "Library/Caches/e2em"
             self.assertEqual(runtime.stat().st_mode & 0o777, 0o700)
             with self.assertRaises(ValueError):
-                module.main([*prefix, "install", "--binary", str(source)])
+                module.main([*prefix, "install", "--rules-only", "--binary", str(source)])
             module.main([*prefix, "enrol", "reference"])
             credential = config / "apps/reference.json"
             first = json.loads(credential.read_text(encoding="utf-8"))
@@ -64,7 +66,7 @@ class MacInstall(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory) / ("x" * 100)
             with self.assertRaises(ValueError):
-                module.main(["--home", str(home), "install", "--binary", __file__])
+                module.main(["--home", str(home), "install", "--rules-only", "--binary", __file__])
             self.assertFalse(home.exists())
 
 

@@ -32,22 +32,22 @@ call ID so concurrent operations can complete out of order.
 ## Preview capability profile
 
 The first integration focus is chat drafts and their send boundary. All named
-categories are accepted for reporting, independently of model ratings. The bundled
-check detects email addresses shared in chat messages; the host owns the warning
-and confirmation flow.
+categories are accepted for reporting, independently of model ratings. The service uses Gandalf by default and an exact email detector; the host owns warning and confirmation.
 
 Named categories support `detected` and `score` rules without a category allowlist
 or model evaluation rating gate. Category identifiers are nonempty, at most 128
 bytes, and have no control characters. Only the personal profile and warn/review
-authority are enabled. Custom policy text and platform enforcement are unsupported.
-The bundled backend implements `pii.email`; no model package or token classifier
-is shipped. `model=none`, `tokenizer=none`, `max_tokens=null` and
-empty presets accurately describe the bundled backend. They describe available
-execution rather than restricting category submission. Unavailable deterministic
+authority are enabled. Custom policy text is accepted for reporting; platform
+enforcement remains unsupported.
+The service reports its selected default model and tokenizer identity with `max_tokens=512`. The explicit diagnostic rules-only mode reports `model=none`, `tokenizer=none` and `max_tokens=null`. `presets` lists all 40 built-in definitions, regardless of evaluation
+ratings or execution availability. `custom_policies=report-only` means text is
+accepted but requires a model; a suitable loaded backend reports `supported`. Unavailable deterministic
 checks report `DETECTOR_UNAVAILABLE`; unavailable model checks report
 `MODEL_UNAVAILABLE`. Both produce indeterminate/review and enumerate unevaluated
-rule IDs. A supplied embedded model scorer can opt into all named categories and
-report its model version. Every finite probability from 0 to 1 is returned as a
+rule IDs. A supplied embedded model scorer can opt into all named categories,
+custom policy text, and report its model version. Known names resolve to canonical
+preset wording. Compatible model/custom rules use the batch scoring operation;
+optional context is shared within each batch. Every finite probability from 0 to 1 is returned as a
 model finding, including scores below decision thresholds. Thresholds choose
 message actions, not category eligibility. Contextual and custom block requests
 are invalid even when an unavailable category precedes them. A deterministic
@@ -56,8 +56,7 @@ advisory; no model quality rating is claimed here.
 
 English (`en`) and language-neutral deterministic coverage (`und`) are exposed.
 `auto` yields `und`; it does not claim language identification. An unsupported
-explicit hint yields indeterminate/review. The full target is scanned, with no
-prefix truncation or token limit. Width/compatibility normalisation maps each
+explicit hint yields indeterminate/review. The email detector scans the full target. Model evidence is bounded to 512 tokens; any truncation produces incomplete coverage and `MODEL_TOKEN_LIMIT`. Width/compatibility normalisation maps each
 output byte to its whole original code point. This mapping is appropriate to the
 ASCII email detector; it is not a general tokenizer or linguistic normalizer.
 Deterministic findings use null scores and half-open original UTF-8 byte spans,
@@ -71,8 +70,7 @@ turns, 64 rules, 64 policy versions per principal, 512 result spans, and 131,072
 bytes per IPC frame. Identifiers are nonempty, at most 128 bytes, without control
 characters. Target text may include whitespace; it is never trimmed. Context
 cannot repeat the target ID. IDs/revisions are opaque strings and `latest` is
-invalid for a policy version. Options default individually to 1,000 ms and no
-spans. Deadlines are 1–5,000 ms, include admission/validation, queueing, loading
+invalid for a policy version. Options default individually to 15,000 ms, no spans and the configured default model. Deadlines are 1–30,000 ms, include admission/validation, queueing, loading
 and scoring, and are checked before scoring and before publication.
 
 `target_only` requires no history; `supplied_window` requires its declared 1–32
@@ -97,7 +95,8 @@ keep confirmation specific to that snapshot. The Rust guard and SDK examples do
 this. The application owns encryption/send/display and accessible warnings.
 Installing this provider cannot compel an application to participate or obey.
 `cargo run --locked --example runtime_chat` is an offline reference chat; it
-accepts an optional policy JSON path, prints model scores and unevaluated rules,
+uses every applicable preset by default, accepts optional subset/custom/context
+flags or a policy JSON path, and prints model scores and unevaluated rules,
 requires explicit continuation for warnings, and holds incomplete assessments.
 
 ## Compatibility and acceptance mapping
@@ -106,18 +105,19 @@ requires explicit continuation for warnings, and holds incomplete assessments.
 require an explicit negotiated schema revision before providers emit them.
 Changing enum meanings, required fields, reference scope or ABI ownership is a
 breaking revision. Clients reject incompatible API/ABI versions and malformed
-responses. Separate API 0.1 from C ABI integer 1 and runtime package 0.1.1.
+responses. Separate API 0.1 from C ABI integer 1 and runtime package 0.1.2.
 
 | Specification scenario | Evidence |
 | --- | --- |
 | Ordinary text, email [12,29), emoji, whitespace, full-width text, injection | `tests/conformance/assessments.json`, Rust/C/Python/Node parity |
 | Missing context, exact bytes, stale revisions/context/policy | `tests/runtime.rs`, live SDK snapshot tests |
-| All named categories; unavailable checks; custom rejection; policy immutability/authority | `tests/conformance/policy-reports.json`, `tests/conformance/policy-failures.json`, model scorer and principal/reference tests |
+| Default presets; named/custom checks; optional context; unavailable checks; policy immutability/authority | `tests/conformance/policy-reports.json`, `tests/conformance/policy-failures.json`, model scorer and principal/reference tests |
 | Deadline, memory pressure, load failure, overload, cancellation/restart | gated scheduler tests, live service tests |
 | Malformed response/frame, wrong UID/secret/provider, revoked grant | SDK/schema and service black-box tests |
-| Network/retention | Unix-only adapter; live tests inspect output and runtime files; no telemetry/download code |
-| Tampered/downgraded models | No model loader/package is enabled. Production verification is issue #34 and remains a gate. |
+| Network/retention | Local assessment and no telemetry; optional idle daemon updates use canonical GitHub HTTPS without request data ([details](UPDATING.md)) |
+| Tampered/downgraded models | Signed default manifests, hash-checked assets, monotonic model updates, candidate smoke checks and native qualification |
 
-This slice does not satisfy later signed-package, contextual-model or physical-
-phone acceptance gates. It reports unavailable category checks as unevaluated
-and rejects unsupported authority and custom policy text.
+Model delivery and native CPU contextual scoring are shipped; installer signing and physical-phone qualification remain separate milestones. It reports unavailable category checks as unevaluated
+and rejects unsupported authority and malformed policies.
+
+`options.model` selects an owner-registered alias. `models()` lists aliases; `install_model(source,name,auto_update)` requires a model-management grant. Model downloads are outside assessment. `model_thresholds=true` on score rules applies matching package thresholds, falling back to the explicit rule values. Default message builders use this option. [Deployment and model controls](MODELS.md).

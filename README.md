@@ -1,41 +1,49 @@
 <p align="center"><img src="assets/banner.svg" alt="E2EM — private chat message assessment. One runtime. SDKs for your chat app." width="100%"></p>
 
 <p align="center">
+  <a href="#try-the-reference-chat"><strong>Try the reference chat</strong></a> ·
   <a href="https://github.com/E2EMorg/e2em/releases"><strong>⬇ Download the runtime</strong></a> ·
-  <a href="#try-the-reference-chat">Try the reference chat</a> ·
   <a href="docs/INSTALL.md"><strong>Installation guide</strong></a> ·
   <a href="docs/SDK.md">SDK quick start</a> ·
   <a href="https://e2em.org">The E2EM standard</a>
 </p>
 <p align="center">
   <a href="https://github.com/E2EMorg/e2em/actions/workflows/ci.yml"><img src="https://github.com/E2EMorg/e2em/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/E2EMorg/e2em/releases"><img src="https://img.shields.io/github/v/release/E2EMorg/e2em?include_prereleases&amp;label=preview&amp;color=8b72d8" alt="Latest preview release"></a>
+  <a href="https://github.com/E2EMorg/e2em/releases"><img src="https://img.shields.io/github/v/release/E2EMorg/e2em?label=release&amp;color=8b72d8" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5bbfb2" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/API-0.1-8b72d8" alt="API 0.1">
 </p>
 
-### Install E2EM
-
-**Start with [Downloads](https://github.com/E2EMorg/e2em/releases).** Open the newest **developer preview**, choose the file for your computer below, then follow the [installation guide](docs/INSTALL.md). You do not need Rust, a GPU, or a model download to run E2EM.
-
-| Your computer | Download ending | Next step |
-| :--- | :--- | :--- |
-| Windows · Intel / AMD, 64-bit | `x86_64-pc-windows-msvc.msi` | [Windows setup](docs/INSTALL.md#windows) |
-| Mac · Apple Silicon (M-series) | `aarch64-apple-darwin.pkg` | [Mac setup](docs/INSTALL.md#macos) |
-| Mac · Intel | `x86_64-apple-darwin.pkg` | [Mac setup](docs/INSTALL.md#macos) |
-| Linux · Ubuntu / Debian, 64-bit | `x86_64-unknown-linux-musl.deb` | [Debian / Ubuntu setup](docs/INSTALL.md#linux) |
-| Linux · Fedora / RPM, 64-bit | `x86_64-unknown-linux-musl.rpm` | [Fedora setup](docs/INSTALL.md#linux) |
-
-> **Developer preview:** all named categories are accepted for reporting; the bundled runtime evaluates email-address patterns (`pii.email`) and reports other checks as unevaluated. No contextual model is bundled. Installers are unsigned; Windows/macOS may require explicit permission to open them. Application enrolment and startup are separate setup steps. E2EM works inside apps that integrate it; installing the runtime alone does not add protection to other apps. Native platform test results accompany each release. This is an implementation preview of a developing standard.
-
-
 ### What is E2EM?
 
-E2EM is a local assessment interface for **chat and chat messages**. A chat app supplies a policy and a message before sending; the runtime returns a typed result so the app can send it, show a warning, or hold the draft for review. The original text stays intact, and the app controls what happens next.
+E2EM is a local assessment interface for **chat and chat messages**. Send a message, optionally include earlier conversation, and get a report against the built-in presets. Select a subset or add custom policy text when you need it. Your chat app uses the report to send, warn, or hold a draft for review. The original text stays intact, and the app controls what happens next.
 
-The first focus is the chat composer and its send flow: assess the current draft, show any warning, and check that the draft is still current before sending. All named policy categories can be submitted for reporting, including categories with weak or unknown model ratings. Ratings describe quality and do not decide which categories people may try. The bundled preview evaluates email-address patterns; a supplied model backend can score other named categories.
+The first focus is chat and its send flow. All 40 built-in presets are selected by default, with no model rating gate. Custom policies can be plain strings; policy files are optional for bulk or advanced configuration.
 
 This repository contains the **runtime, SDKs, installers, and integration contract**. The [standard and project overview](https://e2em.org) explain the wider effort. Model training, research datasets, and experimental moderation frontends live outside this repository.
+
+### Assess a message
+
+After [one-time runtime and app setup](docs/INSTALL.md), the Python SDK loads its local connection settings automatically:
+
+```python
+from e2em import assess
+
+report = assess("Hello there!")
+print(report.scores)
+```
+
+That selects all built-in presets. Context, a preset subset, and custom text are optional:
+
+```python
+assess("That sounds good", context=["Shall we meet tomorrow?"])
+assess("Hello there!", policies=["identity.hate", "abuse.threat"])
+assess("The launch is next week", custom_policies=["Keep launch dates private."])
+```
+
+Custom text is added to the defaults. Use `policies=[]` to assess only custom text. No policy JSON file is needed. [Python, Node, and Rust examples](docs/SDK.md) cover persistent clients and result handling.
+
+**Default model:** [Gandalf](https://huggingface.co/krazyjakee/gandalf) runs locally on CPU. Normal setup downloads verified assets; offline installers bundle them. All default policies and custom text can be scored. Missing conversation for `spam.repeat` and truncated evidence remain explicit incomplete coverage. [Model selection and updates](docs/runtime/MODELS.md).
 
 ### Try the reference chat
 
@@ -45,8 +53,21 @@ From a source checkout with Rust 1.95+:
 cargo run --locked --example runtime_chat
 ```
 
-Enter a chat message such as `See you at 6!`, then try `You can reach me at alex@example.test`. The second draft triggers a warning before you choose whether to continue. This offline chat accepts messages locally and does not send real messages or require a running daemon. Its [chat policy](examples/chat-policy.json) is a small example, not a required policy. Try other named categories with `cargo run --locked --example runtime_chat -- examples/category-policy.json`. Without a model backend, these categories are reported as unevaluated and the draft is held for review.
+Enter a message such as `See you at 6!`. The demo uses every applicable built-in preset and reports unavailable checks. It runs offline, needs no service credentials, and does not send real messages. Try a subset with `cargo run --locked --example runtime_chat -- --policy pii.email`, or add text with `--custom "Keep launch dates private."`. Add optional conversation with `--context "Earlier message"`; these flags can be repeated.
 
+### Install E2EM
+
+**Start with [Downloads](https://github.com/E2EMorg/e2em/releases).** Open the newest release, choose the file for your computer below, then follow the [installation guide](docs/INSTALL.md). You do not need Rust, a GPU, or Python inference dependencies. Normal setup downloads Gandalf; choose an `-offline-` installer to include its weights.
+
+| Your computer | Download ending | Next step |
+| :--- | :--- | :--- |
+| Windows · Intel / AMD, 64-bit | `x86_64-pc-windows-msvc.msi` | [Windows setup](docs/INSTALL.md#windows) |
+| Mac · Apple Silicon (M-series) | `aarch64-apple-darwin.pkg` | [Mac setup](docs/INSTALL.md#macos) |
+| Mac · Intel | `x86_64-apple-darwin.pkg` | [Mac setup](docs/INSTALL.md#macos) |
+| Linux · Ubuntu / Debian, 64-bit | `x86_64-unknown-linux-musl.deb` | [Debian / Ubuntu setup](docs/INSTALL.md#linux) |
+| Linux · Fedora / RPM, 64-bit | `x86_64-unknown-linux-musl.rpm` | [Fedora setup](docs/INSTALL.md#linux) |
+
+> Installers are unsigned; Windows/macOS may require permission to open them. Enrolment and startup remain explicit. E2EM works inside apps that integrate it. Native inference and installer reports accompany each release. The developing standard does not claim per-category model qualification.
 
 ---
 
@@ -64,14 +85,16 @@ Enter a chat message such as `See you at 6!`, then try `You can reach me at alex
 flowchart LR
     A[Your chat app] --> B[Python or Node SDK]
     B <-->|Authenticated local IPC| C[E2EM runtime]
-    C --> D[Email-address check in chat text]
+    C --> D[Gandalf CPU inference and email detector]
     C --> E[Typed assessment]
     E --> A
     F[Rust or C/C++ host] --> G[Embedded E2EM core]
     G --> D
 ```
 
-The shared service uses Unix sockets on Linux/macOS and a local named pipe on Windows. Embedded integrations run in the host process. Each app must explicitly enrol before using the service; app display names do not grant access.
+The shared service uses Unix sockets on Linux/macOS and a local named pipe on Windows. Embedded integrations run in the host process. The SDK loads the local settings created during app enrolment. This authenticates apps sharing the service; it is not a user account or cloud API key. Embedded Rust/C use needs no service credentials.
+
+Managed setup enables [background runtime updates](docs/runtime/UPDATING.md). Update checks and downloads wait for an idle runtime; restart waits for assessments and replies to finish. Updates preserve credentials and keep the previous working version for rollback. Setup offers an opt-out for offline installations.
 
 ### SDKs at a glance
 
@@ -87,47 +110,11 @@ SDK packages are attached to the same [versioned GitHub Releases](https://github
 For downloaded Python wheels and Node archives:
 
 ```sh
-python3 -m pip install ./e2em_local-0.1.1-py3-none-any.whl
-npm install ./e2em-local-0.1.1.tgz
+python3 -m pip install ./e2em_local-0.1.2-py3-none-any.whl
+npm install ./e2em-local-0.1.2.tgz
 ```
 
 Rust SDK source and native C ABI archives are also included. Python/Node SDKs connect to an installed and enrolled runtime; installing an SDK alone does not start one.
-
-### Assess a chat draft
-
-After [installing the runtime and enrolling your app](docs/INSTALL.md), load the private credentials that setup creates. Do not put credentials in source control. The [complete SDK guide](docs/SDK.md) includes credential paths, Python, TypeScript, Rust, and error handling.
-
-```python
-import asyncio
-import json
-from pathlib import Path
-from e2em import Client, E2EMError
-
-async def main():
-    credentials = json.loads(
-        (Path.home() / ".config/e2em/apps/my-app.json").read_text(encoding="utf-8")
-    )  # Linux / macOS; see the guide for Windows.
-    policy = json.loads(Path("examples/chat-policy.json").read_text(encoding="utf-8"))
-    client = await Client.open(**{key: credentials[key] for key in
-        ("socket_path", "principal", "secret", "provider")})
-    async with client:
-        reference = await client.validate_policy(policy)
-        request = {
-            "api_version": "0.1", "request_id": "draft-1", "direction": "outgoing",
-            "message": {"id": "draft", "revision": "1", "speaker": "self",
-                        "text": "You can reach me at alex@example.test"},
-            "policy_ref": reference,
-        }
-        try:
-            result = await client.assess(request)
-        except E2EMError as error:
-            print(f"Hold for review: {error.code}")
-            return
-        if result.applies_to(request):
-            print(result.status, result.action)  # assessed warn
-
-asyncio.run(main())
-```
 
 ### Handle the result
 
@@ -152,14 +139,14 @@ The app must recheck the current snapshot at the actual send boundary, including
 
 | Available in 0.1 | Outside this preview |
 | :--- | :--- |
-| All named categories accepted for reporting | Custom policy text |
-| `pii.email` detection; model scores with a supplied embedded backend | Bundled contextual model and per-category evaluation ratings |
+| All 40 default presets, named categories, and custom policy text | Platform enforcement |
+| Gandalf default, custom model selection and verified model updates | Per-category evaluation ratings |
 | Personal `warn` / `review` policies | Platform enforcement and block policies |
 | Preserved original text and optional UTF-8 spans | Message rewriting |
 | Authenticated desktop IPC, cancellation, revision checks | Browser extension transport and sandbox brokers |
 | Rust core and C ABI; Python and Node clients | OS-supplied providers or automatic provider discovery |
 
-`capabilities()` is authoritative for the running provider. The bundled backend reports `model=none` and `tokenizer=none`; it does not claim model qualification. Account authentication and enrolment separate cooperating apps; they do not isolate secrets from a hostile process running as the same OS user. Read the [security boundaries](docs/runtime/SECURITY.md) before embedding or deploying.
+`capabilities()` is authoritative for the running provider. The service reports its model and tokenizer identity; model qualification remains a separate evaluation task. Account authentication and enrolment separate cooperating apps; they do not isolate secrets from a hostile process running as the same OS user. Read the [security boundaries](docs/runtime/SECURITY.md) before embedding or deploying.
 
 ### Build and contribute
 
@@ -198,4 +185,4 @@ See [CONTRIBUTING](CONTRIBUTING.md) for prerequisites, foreign-client checks, sc
 
 ### License and provenance
 
-Runtime code, SDKs, examples, and documentation in this repository are available under the [MIT License](LICENSE). Third-party dependencies retain their own licenses. No model weights or training datasets are distributed here. The runtime was extracted from the original E2EM research repository; [provenance](docs/ORIGIN.md) records the source revision and changes.
+Runtime code, SDKs, examples, and documentation in this repository are available under the [MIT License](LICENSE). Third-party dependencies retain their own licenses. Gandalf deployment weights are distributed with offline installers and release assets under the owner-authorized MIT licence, with upstream notices retained. Training datasets are not distributed. The runtime was extracted from the original E2EM research repository; [provenance](docs/ORIGIN.md) records the source revision and changes.

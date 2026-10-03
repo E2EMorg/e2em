@@ -9,11 +9,12 @@ import shutil
 import socket
 import stat
 import uuid
+from setup_models import arguments as model_arguments, provision, remove_models
 
 UNIT = """[Unit]
-Description=Local rules-only E2EM preview
+Description=Local E2EM runtime
 [Service]
-ExecStart=%h/.local/bin/e2emd --socket %t/e2em/runtime.sock --grants %h/.config/e2em/grants.json
+ExecStart=%h/.local/bin/e2emd --socket %t/e2em/runtime.sock --grants %h/.config/e2em/grants.json --auto-update
 RuntimeDirectory=e2em
 RuntimeDirectoryMode=0700
 UMask=0077
@@ -41,6 +42,19 @@ def atomic_json(path,value):
     finally:
         temporary.unlink(missing_ok=True)
 
+def remove_updates(config):
+    updates = config / 'updates'
+    if not updates.exists() and not updates.is_symlink():
+        return
+    private_dir(updates)
+    names = {'state.json', 'status.json', 'supervisor.lock', 'check-request.json'}
+    for path in updates.iterdir():
+        if path.name in names or path.name.startswith('.e2em-update-') or re.fullmatch(r'e2emd-\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?(?:\.exe)?', path.name):
+            if path.is_file() or path.is_symlink():
+                path.unlink()
+    if not any(updates.iterdir()):
+        updates.rmdir()
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home",type=Path,default=Path.home())
@@ -48,8 +62,11 @@ def main(argv=None):
     install = sub.add_parser("install"); install.add_argument("--binary",type=Path,required=True)
     install.add_argument("--use-packaged-binary", action="store_true",
                          help="reference a package-managed executable instead of copying it")
+    install.add_argument("--no-auto-update", action="store_true", help="disable idle background runtime updates")
+    model_arguments(install)
     for command in ("enrol","revoke"):
         action = sub.add_parser(command); action.add_argument("principal")
+        if command == "enrol": action.add_argument("--model-management", action="store_true")
     sub.add_parser("uninstall")
     args = parser.parse_args(argv)
     config = args.home / ".config/e2em"
@@ -70,9 +87,14 @@ def main(argv=None):
             shutil.copyfile(args.binary,binary); binary.chmod(0o700)
         unit.parent.mkdir(parents=True,exist_ok=True)
         unit_text = UNIT.replace('%h/.local/bin/e2emd', '"' + str(packaged) + '"') if packaged else UNIT
+        if args.no_auto_update:
+            unit_text = unit_text.replace(' --auto-update', '')
+        if args.offline: unit_text = unit_text.replace(' --auto-update', '') .replace(' --grants', ' --offline --grants')
+        if args.rules_only: unit_text = unit_text.replace(' --grants', ' --rules-only --grants')
         unit.write_text(unit_text); unit.chmod(0o600)
         atomic_json(config / "grants.json",{"provider":"project-"+uuid.uuid4().hex,"grants":[]})
         atomic_json(config / "installation.json",{"version":1, **({"packaged_binary": str(packaged)} if packaged else {})})
+        provision(args, packaged or binary, config)
         print("Installed. Start with: systemctl --user daemon-reload; systemctl --user enable --now e2emd")
         return
     private_dir(config)
@@ -92,7 +114,9 @@ def main(argv=None):
         managed = [unit,config / "grants.json",config / "installation.json"]
         if "packaged_binary" not in marker: managed.append(binary)
         for path in managed: path.unlink()
-        config.rmdir()
+        remove_updates(config)
+        remove_models(config)
+        if not any(config.iterdir()): config.rmdir()
         print("Removed. Reload the user service manager with systemctl --user daemon-reload.")
         return
     if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}",args.principal): raise ValueError("principal must be a simple application slug")
@@ -104,6 +128,7 @@ def main(argv=None):
         atomic_json(grants_path,grants); credential.unlink(missing_ok=True); return
     if len(grants["grants"]) >= 64: raise ValueError("grant limit reached")
     grant = {"principal":args.principal,"uid":os.getuid(),"secret":secrets.token_hex(32)}
+    if args.model_management: grant['model_management'] = True
     grants["grants"].append(grant)
     atomic_json(grants_path,grants)
     private_dir(config / "apps")

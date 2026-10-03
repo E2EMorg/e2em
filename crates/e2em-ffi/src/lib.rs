@@ -61,6 +61,45 @@ pub extern "C" fn e2em_open(abi: u32) -> u64 {
         id
     })
 }
+/// Open a provisioned native model store without downloading assets in the SDK.
+/// # Safety
+/// `config_path` must point to `len` readable UTF-8 bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn e2em_open_models(abi: u32, config_path: *const u8, len: usize) -> u64 {
+    guarded(|| {
+        if abi != 1 || config_path.is_null() || len == 0 || len > 4096 {
+            return 0;
+        }
+        // SAFETY: documented caller precondition; pointer/length checked above.
+        let bytes = unsafe { std::slice::from_raw_parts(config_path, len) };
+        let Ok(path) = std::str::from_utf8(bytes) else {
+            return 0;
+        };
+        let path = std::path::PathBuf::from(path);
+        if !path.is_absolute() {
+            return 0;
+        }
+        let Ok(scheduler) = Scheduler::with_models(
+            std::time::Duration::from_secs(300),
+            models::Manager::new(path),
+        ) else {
+            return 0;
+        };
+        let mut registry = registry().lock().expect("registry lock");
+        if registry.clients.len() >= 64 {
+            return 0;
+        }
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        registry.clients.insert(
+            id,
+            Arc::new(Client {
+                scheduler: Arc::new(scheduler),
+                principal: format!("ffi-{id}"),
+            }),
+        );
+        id
+    })
+}
 /// # Safety
 /// `input` must point to `len` readable bytes for the duration of this call.
 #[unsafe(no_mangle)]
@@ -88,6 +127,9 @@ pub unsafe extern "C" fn e2em_call(client: u64, input: *const u8, len: usize) ->
             Ok(call) if call.api_version != API_VERSION => error(ErrorCode::UnsupportedVersion),
             Ok(call) if !identifier(&call.call_id) => error(ErrorCode::InvalidRequest),
             Ok(call) => match call.operation {
+                Operation::Models | Operation::InstallModel { .. } => {
+                    error(ErrorCode::UnsupportedPolicy)
+                }
                 Operation::Capabilities => ready(Reply::Capabilities {
                     capabilities: client.scheduler.capabilities(),
                 }),

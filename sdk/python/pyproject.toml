@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "e2em-local"
-version = "0.1.1"
+version = "0.1.2"
 requires-python = ">=3.11"
 description = "Local E2EM chat message assessment client; no inference dependencies"
 license = "MIT"

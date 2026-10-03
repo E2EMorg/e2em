@@ -14,7 +14,8 @@ Incompatible ABI versions return 0. The first focus is assessing chat messages
 before sending. All named categories are accepted for reporting without a model
 rating gate. The bundled `pii.email` detector evaluates email-address patterns;
 unavailable checks return indeterminate/review and unevaluated rule IDs.
-Custom policy text remains unsupported. No model is shipped.
+Custom policy text is accepted; without a suitable model it is reported as
+unevaluated. The preset catalogue is built in. `e2em_open(1)` retains this diagnostic behavior; use `e2em_open_models(1, path_bytes, length)` with an installed `models.json` to enable Gandalf and custom models.
 
 Call `e2em_call(client, bytes, length)` with UTF-8 Call JSON, as defined by the
 runtime schema. The input is copied/deserialized during the call; the caller

@@ -34,7 +34,7 @@ class WindowsSetupTest(unittest.TestCase):
             def manage(*args):
                 result = subprocess.run([*command, *args], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-            manage("-Action", "install", "-Binary", str(binary))
+            manage("-Action", "install", "-RulesOnly", "-Binary", str(binary))
             try:
                 manage("-Action", "enrol", "-Principal", "fixture")
                 first = json.loads((install / "app-fixture.json").read_text(encoding="utf-8"))

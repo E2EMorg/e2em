@@ -26,7 +26,7 @@
     "options": {
       "$ref": "#/$defs/Options",
       "default": {
-        "deadline_ms": 1000,
+        "deadline_ms": 15000,
         "include_spans": false
       }
     },
@@ -123,12 +123,18 @@
         "deadline_ms": {
           "type": "integer",
           "format": "uint64",
-          "default": 1000,
+          "default": 15000,
           "minimum": 0
         },
         "include_spans": {
           "type": "boolean",
           "default": false
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
@@ -259,6 +265,9 @@
           ],
           "format": "uint",
           "minimum": 0
+        },
+        "model_thresholds": {
+          "type": "boolean"
         },
         "policy_text": {
           "type": [

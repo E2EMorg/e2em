@@ -117,7 +117,7 @@ class PackageSetupTest(unittest.TestCase):
             root = Path(temporary); binary = root / 'e2emd'; binary.write_bytes(b'package-owned'); binary.chmod(0o755)
             for name, installer in [('linux', install_runtime), ('macos', install_macos_runtime)]:
                 home = root / name; home.mkdir(mode=0o700)
-                installer.main(['--home', str(home), 'install', '--binary', str(binary), '--use-packaged-binary'])
+                installer.main(['--home', str(home), 'install', '--rules-only', '--binary', str(binary), '--use-packaged-binary'])
                 installer.main(['--home', str(home), 'enrol', 'app'])
                 config = home / '.config/e2em'
                 marker = json.loads((config / 'installation.json').read_text(encoding="utf-8"))
@@ -140,7 +140,7 @@ class PackageSetupTest(unittest.TestCase):
             root = Path(temporary); home = root / 'user'; home.mkdir()
             binary = root / 'e2em%unsafe'; binary.write_bytes(b'binary')
             with self.assertRaises(ValueError):
-                install_runtime.main(['--home', str(home), 'install', '--binary', str(binary), '--use-packaged-binary'])
+                install_runtime.main(['--home', str(home), 'install', '--rules-only', '--binary', str(binary), '--use-packaged-binary'])
             self.assertFalse((home / '.config/e2em').exists())
 
 

@@ -50,7 +50,7 @@ class Service(unittest.IsolatedAsyncioTestCase):
     def write_grants(self):
         self.grants_path.write_text(json.dumps(self.grants)); self.grants_path.chmod(0o600)
     def start(self):
-        self.process = subprocess.Popen([os.environ["E2EM_SERVICE_BIN"],"--socket",str(self.socket),"--grants",str(self.grants_path),"--idle-seconds","1"],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        self.process = subprocess.Popen([os.environ["E2EM_SERVICE_BIN"],"--rules-only","--socket",str(self.socket),"--grants",str(self.grants_path),"--idle-seconds","1"],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     async def connect(self,principal="python",secret=None,provider="test-provider"):
         client = await Client.open(str(self.socket),principal,secret or ("a" if principal == "python" else "b")*64,provider)
         self.clients.append(client); return client
@@ -58,7 +58,7 @@ class Service(unittest.IsolatedAsyncioTestCase):
         grants=self.directory / "native-grants.json"
         grants.write_text(json.dumps({"provider":"native-provider","grants":self.grants["grants"]}));grants.chmod(0o600)
         path=self.directory / "native.sock"
-        self.native_process=subprocess.Popen([os.environ["E2EM_SERVICE_BIN"],"--socket",str(path),"--grants",str(grants)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        self.native_process=subprocess.Popen([os.environ["E2EM_SERVICE_BIN"],"--rules-only","--socket",str(path),"--grants",str(grants)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         await self.wait_ready(str(path), "native-provider")
         return str(path)
     async def wait_ready(self, path, provider):
@@ -112,6 +112,43 @@ class Service(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.value["coverage"]["unevaluated_rules"], case["expected"]["unevaluated_rules"])
             self.assertEqual(result.value["reason_codes"], case["expected"]["reason_codes"])
             self.assertEqual(result.value["findings"], [])
+    async def test_message_only_context_custom_text_and_automatic_connection(self):
+        from e2em import assess
+        from e2em.message import PRESETS
+        settings = self.directory / "python-app.json"
+        settings.write_text(json.dumps(dict(socket_path=str(self.socket), principal="python", secret="a"*64, provider="test-provider")))
+        settings.chmod(0o600)
+        client = await Client.connect("python", config_path=settings)
+        self.clients.append(client)
+        report = await client.assess("Hello")
+        self.assertEqual(len(report.request["policy"]["rules"]), len(PRESETS))
+        self.assertEqual(report.status, "indeterminate")
+        self.assertEqual(set(report.unevaluated), {preset["id"] for preset in PRESETS.values() if "outgoing" in preset["directions"] and preset["id"] != "pii.email"})
+        report = await client.assess("Contact alex@example.test", policies="pii.email", context="Earlier message")
+        self.assertEqual(report.status, "assessed")
+        self.assertEqual(report.action, "warn")
+        current = report.request
+        self.assertTrue(report.applies_to(current))
+        current["context"][0]["text"] = "Edited context"
+        self.assertFalse(report.applies_to(current))
+        custom = await client.assess("Hello", policies=[], custom_policies="Keep project details private.", context=["Earlier message"])
+        self.assertEqual(custom.status, "indeterminate")
+        self.assertEqual(custom.unevaluated, ["custom-1"])
+        self.assertEqual(custom.scores, {})
+        self.assertNotIn("Keep project details private.", repr(custom))
+        plain = await asyncio.to_thread(assess, "Hello", app="python", config_path=settings, policies=["pii.email"])
+        self.assertEqual(plain.action, "allow")
+        self.grants["grants"].append(dict(principal="my-app", uid=os.getuid(), secret="c"*64))
+        self.write_grants()
+        default_settings = self.directory / ".config/e2em/apps/my-app.json"
+        default_settings.parent.mkdir(parents=True)
+        default_settings.write_text(json.dumps(dict(socket_path=str(self.socket), principal="my-app", secret="c"*64, provider="test-provider")))
+        default_settings.chmod(0o600)
+        from unittest.mock import patch
+        with patch("e2em.Path.home", return_value=self.directory):
+            defaults = await asyncio.to_thread(assess, "Hello")
+        self.assertEqual(len(defaults.request["policy"]["rules"]), len(PRESETS))
+        self.assertEqual(defaults.status, "indeterminate")
     async def test_windows_pipe_adapter_preserves_provider_authentication(self):
         # Exercise the Windows client branch on the Unix fixture transport; this
         # validates adapter framing/authentication, not Windows ACLs or IOCP.

@@ -47,7 +47,15 @@ struct Shared {
 pub type Backend = Box<dyn crate::PolicyScorer + Send + Sync>;
 struct LoadedBackend {
     scorer: Mutex<Option<Backend>>,
+    metadata: Mutex<BackendMetadata>,
     factory: Box<dyn Fn() -> Result<Backend, crate::BackendError> + Send + Sync>,
+}
+struct BackendMetadata {
+    model_categories: bool,
+    custom_policies: bool,
+    model_version: String,
+    tokenizer: String,
+    max_tokens: Option<usize>,
 }
 impl LoadedBackend {
     fn load(&self) -> Result<(), crate::BackendError> {
@@ -56,7 +64,17 @@ impl LoadedBackend {
             .lock()
             .map_err(|_| crate::BackendError::new("loader failed"))?;
         if scorer.is_none() {
-            *scorer = Some((self.factory)()?);
+            let loaded = (self.factory)()?;
+            let mut metadata = self
+                .metadata
+                .lock()
+                .map_err(|_| crate::BackendError::new("loader failed"))?;
+            metadata.model_categories = loaded.supports_model_categories();
+            metadata.custom_policies = loaded.supports_custom_policies();
+            metadata.model_version = loaded.model_version();
+            metadata.tokenizer = loaded.tokenizer_version();
+            metadata.max_tokens = loaded.max_tokens();
+            *scorer = Some(loaded);
         }
         Ok(())
     }
@@ -73,19 +91,70 @@ impl LoadedBackend {
 }
 struct SharedScorer(Arc<LoadedBackend>);
 impl crate::PolicyScorer for SharedScorer {
-    fn supports_model_categories(&self) -> bool {
-        self.0.scorer.lock().is_ok_and(|scorer| {
-            scorer
-                .as_ref()
-                .is_some_and(|scorer| scorer.supports_model_categories())
-        })
-    }
-    fn model_version(&self) -> String {
+    fn begin_request(
+        &self,
+        model: Option<&str>,
+        control: crate::RequestControl,
+        needs_model: bool,
+    ) -> Result<(), crate::BackendError> {
         self.0
             .scorer
             .lock()
+            .map_err(|_| crate::BackendError::new("scorer failed"))?
+            .as_ref()
+            .ok_or_else(|| crate::BackendError::new("backend unloaded"))?
+            .begin_request(model, control, needs_model)
+    }
+    fn coverage(&self) -> (bool, bool) {
+        self.0.scorer.lock().map_or((false, false), |s| {
+            s.as_ref().map_or((true, true), |s| s.coverage())
+        })
+    }
+    fn tokenizer_version(&self) -> String {
+        self.0
+            .metadata
+            .lock()
+            .map_or_else(|_| "none".into(), |m| m.tokenizer.clone())
+    }
+    fn max_tokens(&self) -> Option<usize> {
+        self.0.metadata.lock().ok()?.max_tokens
+    }
+    fn capabilities_model_version(&self) -> String {
+        self.0
+            .metadata
+            .lock()
+            .map_or_else(|_| "none".into(), |m| m.model_version.clone())
+    }
+    fn supports_custom_policies(&self) -> bool {
+        self.0
+            .metadata
+            .lock()
+            .is_ok_and(|metadata| metadata.custom_policies)
+    }
+    fn action_threshold(&self, policy: &str) -> Option<f64> {
+        self.0.scorer.lock().ok().and_then(|scorer| {
+            scorer
+                .as_ref()
+                .and_then(|scorer| scorer.action_threshold(policy))
+        })
+    }
+    fn supports_model_categories(&self) -> bool {
+        self.0
+            .metadata
+            .lock()
+            .is_ok_and(|metadata| metadata.model_categories)
+    }
+    fn model_version(&self) -> String {
+        if let Ok(scorer) = self.0.scorer.lock()
+            && let Some(scorer) = scorer.as_ref()
+        {
+            return scorer.model_version();
+        }
+        self.0
+            .metadata
+            .lock()
             .ok()
-            .and_then(|scorer| scorer.as_ref().map(|scorer| scorer.model_version()))
+            .map(|metadata| metadata.model_version.clone())
             .unwrap_or_else(|| "none".into())
     }
     fn score(
@@ -103,6 +172,28 @@ impl crate::PolicyScorer for SharedScorer {
             .as_ref()
             .ok_or_else(|| crate::BackendError::new("backend unloaded"))?
             .score(message, context, policy)
+    }
+    fn score_many(
+        &self,
+        message: &str,
+        context: Option<&str>,
+        policies: &[String],
+    ) -> Result<Vec<f64>, crate::BackendError> {
+        self.0
+            .scorer
+            .lock()
+            .map_err(|_| crate::BackendError::new("scorer failed"))?
+            .as_ref()
+            .ok_or_else(|| crate::BackendError::new("backend unloaded"))?
+            .score_many(message, context, policies)
+    }
+    fn review_threshold(&self, policy: &str) -> Option<f64> {
+        self.0
+            .scorer
+            .lock()
+            .ok()?
+            .as_ref()?
+            .review_threshold(policy)
     }
 }
 pub struct Scheduler {
@@ -170,6 +261,13 @@ impl Scheduler {
     ) -> Self {
         let backend = Arc::new(LoadedBackend {
             scorer: Mutex::new(None),
+            metadata: Mutex::new(BackendMetadata {
+                model_categories: false,
+                custom_policies: false,
+                model_version: "none".into(),
+                tokenizer: "none".into(),
+                max_tokens: None,
+            }),
             factory: Box::new(factory),
         });
         let shared = Arc::new(Shared {
@@ -193,6 +291,22 @@ impl Scheduler {
             worker: Some(worker),
         }
     }
+    #[cfg(feature = "runtime-service")]
+    pub fn with_models(idle: Duration, manager: super::models::Manager) -> std::io::Result<Self> {
+        let first = super::models::Router::open(manager.clone())?;
+        drop(first);
+        let scheduler = Self::with_factory(idle, move || {
+            super::models::Router::open(manager.clone())
+                .map(|r| Box::new(r) as Backend)
+                .map_err(|_| crate::BackendError::new("model registry unavailable"))
+        });
+        scheduler
+            .shared
+            .backend
+            .load()
+            .map_err(std::io::Error::other)?;
+        Ok(scheduler)
+    }
     pub fn capabilities(&self) -> Capabilities {
         let mut capabilities = self.shared.engine.capabilities();
         capabilities.runtime_state = self.state();
@@ -201,6 +315,16 @@ impl Scheduler {
     }
     pub fn validate_policy(&self, principal: &str, policy: Policy) -> Result<PolicyRef, ErrorCode> {
         self.shared.engine.validate_policy(principal, policy)
+    }
+    pub fn check(&self, message: &str) -> Result<Pending, ErrorCode> {
+        self.check_with(message, presets::CheckOptions::default())
+    }
+    pub fn check_with(
+        &self,
+        message: &str,
+        options: presets::CheckOptions,
+    ) -> Result<Pending, ErrorCode> {
+        self.submit("embedded", presets::request(message, options))
     }
     pub fn submit(&self, principal: &str, request: Request) -> Result<Pending, ErrorCode> {
         let admitted = Instant::now();
@@ -386,7 +510,14 @@ fn run(shared: Arc<Shared>) {
                     fail(&mut result, ErrorCode::DeadlineExceeded);
                     result
                 } else {
-                    shared.engine.assess(&job.principal, &job.request)
+                    shared.engine.assess_controlled(
+                        &job.principal,
+                        &job.request,
+                        crate::RequestControl {
+                            deadline: job.deadline,
+                            cancelled: job.cancelled.clone(),
+                        },
+                    )
                 }
             }
         }));
@@ -428,8 +559,18 @@ fn run(shared: Arc<Shared>) {
                 .active
                 .remove(&(job.principal, job.request.request_id));
             inner.state = if failed {
+                let recoverable = shared
+                    .backend
+                    .metadata
+                    .lock()
+                    .map(|m| m.model_categories)
+                    .unwrap_or(false);
                 shared.backend.unload();
-                State::Failed
+                if recoverable {
+                    State::Unloaded
+                } else {
+                    State::Failed
+                }
             } else if shared.backend.loaded() {
                 State::Ready
             } else {

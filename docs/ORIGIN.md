@@ -15,3 +15,5 @@ Extraction changes:
 - Add download-first documentation, SDK package metadata, native release artifacts and publication checks.
 
 Historical evidence in `runtime/evidence` comes from the source checkout and retains its original provenance and limitations. New CI runs validate this extraction separately. No research model qualification is implied.
+
+The message-first SDK work restores the 40 preset definitions (IDs, canonical wordings, tiers, and directions) from the source checkout’s `training/presets_v1.json` into `src/runtime/presets.json`. SDK copies are generated from that runtime catalogue. Launch/candidate status does not gate selection. No research heuristics, models, datasets, or evaluation-rating claims are imported.

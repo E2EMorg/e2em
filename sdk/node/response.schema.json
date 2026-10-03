@@ -332,6 +332,44 @@
         "custom_policy"
       ]
     },
+    "ModelInfo": {
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "auto_update": {
+          "type": "boolean"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "last_check": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "rollback_available": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "alias",
+        "identity",
+        "version",
+        "source",
+        "auto_update",
+        "last_check",
+        "rollback_available"
+      ]
+    },
     "PolicyRef": {
       "type": "object",
       "properties": {
@@ -365,6 +403,30 @@
     },
     "Reply": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "default_model": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "models"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ModelInfo"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "default_model",
+            "models"
+          ]
+        },
         {
           "type": "object",
           "properties": {

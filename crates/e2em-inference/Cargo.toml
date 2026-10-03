@@ -1,0 +1,20 @@
+[package]
+name = "e2em-inference"
+version = "0.1.2"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+description = "Disposable native ONNX policy scorer for E2EM"
+
+[dependencies]
+e2em-runtime = { path = "../..", default-features = false }
+clap = { version = "4.5", features = ["derive"] }
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "load-dynamic", "api-24"] }
+tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"

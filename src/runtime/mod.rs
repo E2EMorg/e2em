@@ -2,10 +2,16 @@
 pub mod contract;
 pub mod discovery;
 pub mod integration;
+pub mod model;
+#[cfg(feature = "runtime-service")]
+pub mod models;
+pub mod presets;
 pub mod process;
 pub mod scheduler;
 #[cfg(feature = "runtime-service")]
 pub mod service;
+#[cfg(feature = "runtime-service")]
+pub mod update;
 
 use crate::{PolicyScorer, RulesScorer};
 pub use contract::*;
@@ -50,13 +56,21 @@ impl<S: PolicyScorer> Engine<S> {
             api_version: API_VERSION.into(),
             provider: self.provider.clone(),
             runtime: env!("CARGO_PKG_VERSION").into(),
-            model: self.scorer.model_version(),
-            tokenizer: "none".into(),
-            registry: "0.1.0".into(),
+            model: self.scorer.capabilities_model_version(),
+            tokenizer: self.scorer.tokenizer_version(),
+            registry: presets::registry_version().into(),
             languages: vec!["en".into(), "und".into()],
             detectors: vec!["pii.email".into()],
-            presets: vec![],
-            custom_policies: "none".into(),
+            presets: presets::all()
+                .iter()
+                .map(|preset| preset.id.clone())
+                .collect(),
+            custom_policies: if self.scorer.supports_custom_policies() {
+                "supported"
+            } else {
+                "report-only"
+            }
+            .into(),
             profiles: vec![Profile::Personal],
             actions: vec![Action::Warn, Action::Review],
             limits: Limits {
@@ -66,12 +80,19 @@ impl<S: PolicyScorer> Engine<S> {
                 policy_rules: 64,
                 frame_bytes: MAX_FRAME,
                 result_spans: 512,
-                deadline_ms: 5000,
+                deadline_ms: 30000,
             },
             backend_ready: true,
             runtime_state: scheduler::State::Ready,
-            max_tokens: None,
+            max_tokens: self.scorer.max_tokens(),
         }
+    }
+    /// Assess a message against every built-in preset, with no service credentials.
+    pub fn check(&self, message: &str) -> Assessment {
+        self.check_with(message, presets::CheckOptions::default())
+    }
+    pub fn check_with(&self, message: &str, options: presets::CheckOptions) -> Assessment {
+        self.assess("embedded", &presets::request(message, options))
     }
     /// The trusted adapter supplies `principal`; display names confer no authority.
     pub fn validate_policy(&self, principal: &str, policy: Policy) -> Result<PolicyRef, ErrorCode> {
@@ -144,9 +165,24 @@ impl<S: PolicyScorer> Engine<S> {
     }
     /// Blocking primitive for embedded bindings. Async clients use Scheduler.
     pub fn assess(&self, principal: &str, request: &Request) -> Assessment {
+        self.assess_controlled(
+            principal,
+            request,
+            crate::RequestControl {
+                deadline: Instant::now()
+                    + std::time::Duration::from_millis(request.options.deadline_ms.min(30000)),
+                cancelled: std::sync::Arc::default(),
+            },
+        )
+    }
+    pub fn assess_controlled(
+        &self,
+        principal: &str,
+        request: &Request,
+        control: crate::RequestControl,
+    ) -> Assessment {
         let started = Instant::now();
         let mut result = base_result(request);
-        result.versions.model = self.scorer.model_version();
         let execute = || -> Result<Policy, ErrorCode> {
             validate_request(request)?;
             if !identifier(principal) {
@@ -161,6 +197,19 @@ impl<S: PolicyScorer> Engine<S> {
                 return result;
             }
         };
+        let needs_model = policy
+            .rules
+            .iter()
+            .any(|r| r.directions.contains(&request.direction) && r.r#match != Match::Detected);
+        if self
+            .scorer
+            .begin_request(request.options.model.as_deref(), control, needs_model)
+            .is_err()
+        {
+            fail(&mut result, ErrorCode::ModelUnavailable);
+            return result;
+        }
+        result.versions.model = self.scorer.model_version();
         result.versions.policy_id = policy.id.clone();
         result.versions.policy_version = policy.version.clone();
         result.coverage.target_complete = true;
@@ -184,6 +233,8 @@ impl<S: PolicyScorer> Engine<S> {
         };
         result.status = Status::Assessed;
         result.action = Action::Allow;
+        let mut model_scores = vec![None; applicable.len()];
+        let mut scored_contexts = HashSet::new();
         for (index, rule) in applicable.iter().enumerate() {
             if rule.context_requirement == ContextRequirement::SuppliedWindow
                 && request.context.len() < rule.min_context_messages.unwrap_or(1)
@@ -193,14 +244,22 @@ impl<S: PolicyScorer> Engine<S> {
                 result.reason_codes.push("INSUFFICIENT_CONTEXT".into());
                 continue;
             }
-            if rule.r#match == Match::Score {
-                if !self.scorer.supports_model_categories() {
+            if rule.r#match != Match::Detected {
+                let custom = rule.r#match == Match::PolicyText;
+                if (custom && !self.scorer.supports_custom_policies())
+                    || (!custom && !self.scorer.supports_model_categories())
+                {
                     result.status = Status::Indeterminate;
                     result.coverage.unevaluated_rules.push(rule.id.clone());
                     result.reason_codes.push("MODEL_UNAVAILABLE".into());
                     continue;
                 }
-                let category = rule.category.as_deref().expect("validated category");
+                let policy_text = if custom {
+                    rule.policy_text.as_deref().expect("validated policy text")
+                } else {
+                    let category = rule.category.as_deref().expect("validated category");
+                    presets::find(category).map_or(category, |preset| preset.wording.as_str())
+                };
                 let context = (rule.context_requirement == ContextRequirement::SuppliedWindow)
                     .then(|| {
                         request
@@ -210,12 +269,55 @@ impl<S: PolicyScorer> Engine<S> {
                             .collect::<Vec<_>>()
                             .join("\n")
                     });
-                let score =
-                    match self
-                        .scorer
-                        .score(&request.message.text, context.as_deref(), category)
-                    {
-                        Ok(score) if score.is_finite() && (0.0..=1.0).contains(&score) => score,
+                let contextual = rule.context_requirement == ContextRequirement::SuppliedWindow;
+                if scored_contexts.insert(contextual) {
+                    let group: Vec<_> = applicable
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, candidate)| {
+                            candidate.r#match != Match::Detected
+                                && (candidate.context_requirement
+                                    == ContextRequirement::SuppliedWindow)
+                                    == contextual
+                                && (!contextual
+                                    || request.context.len()
+                                        >= candidate.min_context_messages.unwrap_or(1))
+                                && if candidate.r#match == Match::PolicyText {
+                                    self.scorer.supports_custom_policies()
+                                } else {
+                                    self.scorer.supports_model_categories()
+                                }
+                        })
+                        .collect();
+                    let policies: Vec<String> = group
+                        .iter()
+                        .map(|(_, candidate)| {
+                            if candidate.r#match == Match::PolicyText {
+                                candidate.policy_text.clone().expect("validated text")
+                            } else {
+                                let category =
+                                    candidate.category.as_deref().expect("validated category");
+                                presets::find(category)
+                                    .map_or(category, |preset| preset.wording.as_str())
+                                    .into()
+                            }
+                        })
+                        .collect();
+                    match self.scorer.score_many(
+                        &request.message.text,
+                        context.as_deref(),
+                        &policies,
+                    ) {
+                        Ok(scores)
+                            if scores.len() == group.len()
+                                && scores.iter().all(|score| {
+                                    score.is_finite() && (0.0..=1.0).contains(score)
+                                }) =>
+                        {
+                            for ((position, _), score) in group.into_iter().zip(scores) {
+                                model_scores[position] = Some(score);
+                            }
+                        }
                         _ => {
                             result
                                 .coverage
@@ -224,12 +326,34 @@ impl<S: PolicyScorer> Engine<S> {
                             fail(&mut result, ErrorCode::InternalError);
                             break;
                         }
-                    };
-                let threshold = rule.action_threshold.expect("validated threshold");
+                    }
+                }
+                let score = model_scores[index].expect("successful batch includes this rule");
+                let threshold = if custom {
+                    self.scorer.action_threshold(policy_text).unwrap_or(0.5)
+                } else if rule.model_thresholds {
+                    self.scorer
+                        .action_threshold(policy_text)
+                        .unwrap_or(rule.action_threshold.expect("validated threshold"))
+                } else {
+                    rule.action_threshold.expect("validated threshold")
+                };
+                if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
+                    result
+                        .coverage
+                        .unevaluated_rules
+                        .extend(applicable[index..].iter().map(|r| r.id.clone()));
+                    fail(&mut result, ErrorCode::InternalError);
+                    break;
+                }
                 result.findings.push(Finding {
                     rule_id: rule.id.clone(),
                     category: rule.category.clone(),
-                    method: Method::Model,
+                    method: if custom {
+                        Method::CustomPolicy
+                    } else {
+                        Method::Model
+                    },
                     score: Some(score),
                     reason_code: "MODEL_SCORE".into(),
                     spans: vec![],
@@ -237,7 +361,15 @@ impl<S: PolicyScorer> Engine<S> {
                 let action = if score >= threshold {
                     result.reason_codes.push("POLICY_MATCH".into());
                     rule.action
-                } else if rule.review_threshold.is_some_and(|low| score >= low) {
+                } else if (if rule.model_thresholds {
+                    self.scorer
+                        .review_threshold(policy_text)
+                        .or(rule.review_threshold)
+                } else {
+                    rule.review_threshold
+                })
+                .is_some_and(|low| score >= low)
+                {
                     Action::Review
                 } else {
                     Action::Allow
@@ -253,7 +385,13 @@ impl<S: PolicyScorer> Engine<S> {
                 result.reason_codes.push("DETECTOR_UNAVAILABLE".into());
                 continue;
             }
-            let score = self.scorer.score(&normal, None, "pii.email");
+            let score = if self.scorer.supports_model_categories()
+                || self.scorer.supports_custom_policies()
+            {
+                RulesScorer::new().score(&normal, None, "pii.email")
+            } else {
+                self.scorer.score(&normal, None, "pii.email")
+            };
             let matches: Vec<_> = crate::rules::EMAIL.find_iter(&normal).collect();
             match score {
                 Ok(score) if score == if matches.is_empty() { 0.0 } else { 1.0 } => (),
@@ -303,6 +441,15 @@ impl<S: PolicyScorer> Engine<S> {
                 }
                 result.reason_codes.push("POLICY_MATCH".into());
             }
+        }
+        let coverage = self.scorer.coverage();
+        if matches!(result.status, Status::Assessed | Status::Indeterminate)
+            && (!coverage.0 || !coverage.1)
+        {
+            result.coverage.target_complete &= coverage.0;
+            result.coverage.context_complete &= coverage.1;
+            result.status = Status::Indeterminate;
+            result.reason_codes.push("MODEL_TOKEN_LIMIT".into());
         }
         if result.status != Status::Assessed {
             result.action = Action::Review;
@@ -371,11 +518,12 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
         }
         match rule.r#match {
             Match::PolicyText => {
-                if rule.category.is_some()
+                if rule.model_thresholds
+                    || rule.category.is_some()
                     || rule
                         .policy_text
                         .as_ref()
-                        .is_none_or(|p| p.is_empty() || p.len() > 512)
+                        .is_none_or(|p| p.trim().is_empty() || p.len() > 512)
                     || rule.review_threshold.is_some()
                     || rule.action_threshold.is_some()
                     || rule.action == Action::Block
@@ -383,7 +531,6 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
                 {
                     return Err(ErrorCode::InvalidPolicy);
                 }
-                unsupported = true;
             }
             Match::Score => {
                 let valid = match (rule.review_threshold, rule.action_threshold) {
@@ -405,7 +552,8 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
                 }
             }
             Match::Detected => {
-                if rule.policy_text.is_some()
+                if rule.model_thresholds
+                    || rule.policy_text.is_some()
                     || rule.category.is_none()
                     || rule.review_threshold.is_some()
                     || rule.action_threshold.is_some()
@@ -436,7 +584,12 @@ pub fn validate_request(request: &Request) -> Result<(), ErrorCode> {
         || message.text.is_empty()
         || message.text.len() > 16_384
         || request.context.len() > 32
-        || !(1..=5000).contains(&request.options.deadline_ms)
+        || !(1..=30000).contains(&request.options.deadline_ms)
+        || request
+            .options
+            .model
+            .as_ref()
+            .is_some_and(|m| !model::name(m))
         || request.language.len() > 32
         || request.language.is_empty()
     {
@@ -485,7 +638,7 @@ pub fn base_result(request: &Request) -> Assessment {
             runtime: env!("CARGO_PKG_VERSION").into(),
             model: "none".into(),
             detectors: "0.1.0".into(),
-            registry: "0.1.0".into(),
+            registry: presets::registry_version().into(),
             policy_id: String::new(),
             policy_version: String::new(),
         },

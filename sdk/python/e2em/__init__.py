@@ -12,11 +12,12 @@ import re
 import socket
 import stat
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .schema import SCHEMA, valid
 from .types import Request as RequestValue, Policy as PolicyValue, Capabilities, PolicyRef
+from .message import request as message_request, PRESETS
 
 MAX_FRAME = 131072
 class E2EMError(Exception):
@@ -45,12 +46,24 @@ def utf16_span(text: str, start: int, end: int) -> tuple[int, int]:
 class Assessment:
     _value: dict[str, Any]
     snapshot: str
+    _request: dict[str, Any] = field(default_factory=dict, repr=False)
     @property
     def value(self) -> dict[str, Any]: return copy.deepcopy(self._value)
     @property
     def status(self) -> str: return self._value["status"]
     @property
     def action(self) -> str: return self._value["action"]
+    @property
+    def scores(self) -> dict[str, float]:
+        return {finding["category"] or finding["rule_id"]: finding["score"]
+                for finding in self._value["findings"] if finding["score"] is not None}
+    @property
+    def request(self) -> dict[str, Any]: return copy.deepcopy(self._request)
+    @property
+    def unevaluated(self) -> list[str]:
+        rules = {rule["id"]: rule.get("category") or rule["id"]
+                 for rule in self._request.get("policy", {}).get("rules", [])}
+        return [rules.get(rule, rule) for rule in self._value["coverage"]["unevaluated_rules"]]
     def applies_to(self, request: dict) -> bool: return self.snapshot == _snapshot(request)
 
 
@@ -82,7 +95,36 @@ def _assessment(value: Any, request: dict) -> Assessment:
                 utf16_span(texts[span["message_id"]], span["start"], span["end"])
     except (KeyError, TypeError, ValueError, E2EMError) as exc:
         raise E2EMError("INTERNAL_ERROR") from exc
-    return Assessment(copy.deepcopy(value), _snapshot(request))
+    return Assessment(copy.deepcopy(value), _snapshot(request), copy.deepcopy(request))
+
+
+def _connection(app="my-app", config_path=None):
+    """Load installer-managed local app settings without exposing secrets to callers."""
+    try:
+        if not isinstance(app, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", app):
+            raise ValueError()
+        path = Path(config_path) if config_path is not None else (
+            Path(os.environ["LOCALAPPDATA"]) / "E2EM" / f"app-{app}.json"
+            if os.name == "nt" else Path.home() / ".config/e2em/apps" / f"{app}.json"
+        )
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+            metadata = os.fstat(stream.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 16384:
+                raise ValueError()
+            if os.name == "posix" and (metadata.st_uid != os.getuid() or metadata.st_mode & 0o077):
+                raise ValueError()
+            config = json.load(stream)
+        if not isinstance(config, dict):
+            raise ValueError()
+        fields = ("socket_path", "principal", "secret", "provider")
+        if any(not isinstance(config.get(key), str) or not config[key] for key in fields):
+            raise ValueError()
+        if config["principal"] != app:
+            raise ValueError()
+        return {key: config[key] for key in fields}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise E2EMError("MODEL_UNAVAILABLE") from exc
 
 class Client:
     def __init__(self):
@@ -93,11 +135,16 @@ class Client:
         self._write_lock = asyncio.Lock()
         self.provider = None
         self.capability_manifest = None
+        self.model = None
         self._counter = 0
         self._closed = False
 
     @classmethod
-    async def open(cls, socket_path: str, principal: str, secret: str, provider: str) -> Client:
+    async def connect(cls, app: str = "my-app", *, config_path=None, model=None) -> Client:
+        return await cls.open(**_connection(app, config_path), model=model)
+
+    @classmethod
+    async def open(cls, socket_path: str, principal: str, secret: str, provider: str, model=None) -> Client:
         client = cls()
         try:
             if os.name == "nt":
@@ -134,6 +181,7 @@ class Client:
             caps = await client.capabilities()
             if caps["api_version"] != "0.1" or not caps["backend_ready"]: raise E2EMError("MODEL_UNAVAILABLE")
             client.capability_manifest = caps
+            client.model = model
             return client
         except asyncio.CancelledError:
             await client.close()
@@ -205,10 +253,22 @@ class Client:
         return (await self._call({"op": "capabilities"}, "capabilities"))["capabilities"]
     async def validate_policy(self, policy: PolicyValue) -> PolicyRef:
         return (await self._call({"op": "validate_policy", "policy": policy}, "policy"))["policy_ref"]
-    async def assess(self, request: RequestValue) -> Assessment:
+    async def models(self):
+        return await self._call({"op": "models"}, "models")
+    async def install_model(self, source: str, *, name="custom", auto_update=False):
+        return await self._call({"op": "install_model", "source": source, "name": name, "auto_update": auto_update}, "models", 900)
+    async def assess(self, request: RequestValue | str, *, context=None, policies=None, custom_policies=None, model=None, deadline_ms=15000) -> Assessment:
+        model = self.model if model is None else model
+        if isinstance(request, str):
+            try: request = message_request(request, context=context, policies=policies, custom_policies=custom_policies, model=model, deadline_ms=deadline_ms)
+            except (TypeError, ValueError) as exc: raise E2EMError("INVALID_REQUEST") from exc
+        elif context is not None or policies is not None or custom_policies is not None:
+            raise E2EMError("INVALID_REQUEST")
         snapshot = copy.deepcopy(request)
+        if model is not None:
+            snapshot.setdefault("options", {}).setdefault("model", model)
         try:
-            reply = await self._call({"op": "assess", "request": snapshot}, "assessment", snapshot.get("options", {}).get("deadline_ms", 1000)/1000)
+            reply = await self._call({"op": "assess", "request": snapshot}, "assessment", snapshot.get("options", {}).get("deadline_ms", 15000)/1000 + 1)
             return _assessment(reply["assessment"], snapshot)
         except (asyncio.CancelledError, E2EMError):
             if not self._closed:
@@ -235,26 +295,28 @@ class Client:
 
 class BlockingClient:
     """Optional blocking facade; owns one dedicated asyncio loop thread."""
-    def __init__(self, **connection):
+    def __init__(self, *, app="my-app", config_path=None, model=None, **connection):
         import threading
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
         self._disposed = False
-        try: self._client = self._run(Client.open(**connection))
+        try: self._client = self._run(Client.open(**connection, model=model) if connection else Client.connect(app, config_path=config_path, model=model))
         except BaseException:
             self._loop.call_soon_threadsafe(self._loop.stop)
             self._thread.join()
             self._loop.close()
             raise
-    def _run(self, coroutine):
+    def _run(self, coroutine, timeout=35):
         if self._disposed:
             coroutine.close()
             raise E2EMError("MODEL_UNAVAILABLE")
-        return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result(timeout=10)
+        return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result(timeout=timeout)
     def capabilities(self): return self._run(self._client.capabilities())
+    def models(self): return self._run(self._client.models())
+    def install_model(self, source, **options): return self._run(self._client.install_model(source, **options), timeout=905)
     def validate_policy(self, policy): return self._run(self._client.validate_policy(policy))
-    def assess(self, request): return self._run(self._client.assess(request))
+    def assess(self, request, **options): return self._run(self._client.assess(request, **options))
     def cancel(self, request_id): return self._run(self._client.cancel(request_id))
     def close(self):
         if self._disposed: return
@@ -266,3 +328,9 @@ class BlockingClient:
             self._loop.close()
     def __enter__(self): return self
     def __exit__(self, *_): self.close()
+
+
+def assess(message: str, *, context=None, policies=None, custom_policies=None, app="my-app", config_path=None, model=None, deadline_ms=15000) -> Assessment:
+    """Send just a message. Default presets and local app settings are automatic."""
+    with BlockingClient(app=app, config_path=config_path, model=model) as client:
+        return client.assess(message, context=context, policies=policies, custom_policies=custom_policies, deadline_ms=deadline_ms)

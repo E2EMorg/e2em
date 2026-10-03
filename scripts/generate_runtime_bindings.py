@@ -52,4 +52,7 @@ def main():
     response = (SCHEMAS / "response.json").read_text(encoding="utf-8")
     (ROOT / "sdk/node/response.schema.json").write_text(response)
     (ROOT / "sdk/python/e2em/response.schema.json").write_text(response)
+    presets = (ROOT / "src/runtime/presets.json").read_text(encoding="utf-8")
+    (ROOT / "sdk/node/presets.json").write_text(presets)
+    (ROOT / "sdk/python/e2em/presets.json").write_text(presets)
 if __name__ == "__main__": main()

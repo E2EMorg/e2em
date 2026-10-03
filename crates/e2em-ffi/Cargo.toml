@@ -1,6 +1,6 @@
 [package]
 name = "e2em-ffi"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
@@ -8,5 +8,5 @@ repository = "https://github.com/E2EMorg/e2em"
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 [dependencies]
-e2em-runtime = { version = "0.1.1", path = "../.." }
+e2em-runtime = { version = "0.1.2", path = "../..", features = ["runtime-service"] }
 serde_json = "1"

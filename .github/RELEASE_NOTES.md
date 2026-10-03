@@ -1,8 +1,8 @@
-E2EM runtime and SDK developer preview. Chat message assessment, authenticated local IPC, and embedded Rust/C APIs. Named categories are accepted for reporting; the bundled backend evaluates email patterns and holds unavailable checks for review. No model or GPU required.
+E2EM 0.1.2 makes Gandalf the default CPU model for the shared runtime, with all 40 default policies, optional conversation and custom policy strings. Normal user setup downloads verified model assets; offline installers include the same weights. SDKs can select registered custom models and owner-authorized applications can install compatible model manifests from HTTPS URLs.
 
-**Start here:** [Installation guide](https://github.com/E2EMorg/e2em/blob/main/docs/INSTALL.md) · [SDK guide](https://github.com/E2EMorg/e2em/blob/main/docs/SDK.md) · [Changelog](https://github.com/E2EMorg/e2em/blob/main/CHANGELOG.md)
+[Installation guide](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/INSTALL.md) · [SDK guide](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/SDK.md) · [Model format and controls](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/runtime/MODELS.md)
 
-Choose an installer for your computer:
+Choose the normal installer for your platform, or its `-offline-` counterpart to include Gandalf:
 
 | Platform | Asset ending |
 | --- | --- |
@@ -12,10 +12,10 @@ Choose an installer for your computer:
 | Debian / Ubuntu x86_64 | `x86_64-unknown-linux-musl.deb` |
 | Fedora x86_64 | `x86_64-unknown-linux-musl.rpm` |
 
-Installers are **unsigned**. Application enrolment and user-session startup remain explicit. Installing E2EM alone does not change other apps. The bundled check provides personal email-pattern warnings. Other named categories are reported as unevaluated without a supplied backend; no contextual model, block enforcement, browser transport, or sandbox broker is shipped.
+Installers are unsigned. Model descriptors are separately Ed25519 signed; assets are size/hash checked and candidates pass native smoke checks before activation. Model checks run every six hours when idle, retain the previous working version and support rollback. `--offline` / `-Offline` disables all network access. Enrolment and user-session startup remain explicit.
 
-Python wheel/source, Node `.tgz`, Rust source and platform C SDK archives are included. Registry publication is not configured. Linux C SDK libraries use the Ubuntu 24.04 runner baseline; Linux runtime installers are musl-static.
+Gandalf 0.0.1 is distributed under the owner-authorized MIT licence with upstream attribution, base-model licence and pinned provenance retained. The FP32 ONNX export passes comparison against the original checkpoint. Supporting all policies does not establish their accuracy: published policy thresholds are retained, other wordings use fallback thresholds. Missing required conversation and evidence exceeding 512 tokens produce an indeterminate review outcome. No per-category quality guarantee, block enforcement or sandbox broker is claimed.
 
-Native service checks and installer install/upgrade/remove gates passed before publication. Platform reports and `SHA256SUMS` are attached; checksums establish byte integrity, not publisher authenticity. Historical resource evidence is documented separately in the source tree.
+Python wheel/source, Node archive, Rust source and native C SDKs accompany the runtime. Registry publication is not configured. Linux inference needs glibc 2.28+ and libstdc++; the daemon itself is musl-static. CPU inference needs no GPU or Python model packages.
 
-Licensed under MIT. [Security boundaries](https://github.com/E2EMorg/e2em/blob/main/docs/runtime/SECURITY.md).
+Release publication requires native inference and installer install/upgrade/remove gates on Linux, Windows and both Mac architectures. Reports and `SHA256SUMS` accompany the assets. Checksums establish byte integrity; model signatures do not sign the installers.

@@ -1,8 +1,8 @@
 # Install the E2EM runtime
 
-[⬇ Download a developer preview](https://github.com/E2EMorg/e2em/releases) · [README](../README.md) · [SDK guide](SDK.md)
+[⬇ Download the runtime](https://github.com/E2EMorg/e2em/releases) · [README](../README.md) · [SDK guide](SDK.md)
 
-Choose your platform under **Assets** on the newest preview release. Files start with `e2em-runtime-VERSION-` and end with the target and package type below. If GitHub collapses Assets, expand it. Python wheels and Node archives on the same page are for app developers, not the runtime installer.
+Choose your platform under **Assets** on the newest release. Files start with `e2em-runtime-VERSION-` and end with the target and package type below. If GitHub collapses Assets, expand it. Python wheels and Node archives on the same page are for app developers, not the runtime installer.
 
 | Computer | Runtime installer |
 | --- | --- |
@@ -12,9 +12,9 @@ Choose your platform under **Assets** on the newest preview release. Files start
 | Ubuntu / Debian x86_64 | `e2em-runtime-VERSION-x86_64-unknown-linux-musl.deb` |
 | Fedora x86_64 | `e2em-runtime-VERSION-x86_64-unknown-linux-musl.rpm` |
 
-The release is an unsigned developer preview. macOS/Windows can warn about an unverified publisher; signed/notarized installers are a future release milestone. Only open an installer you obtained from this repository's release page. Check its SHA-256 against `SHA256SUMS` if needed. Checksums verify bytes, not publisher identity.
+Installers are unsigned. macOS/Windows can warn about an unverified publisher; signed/notarized installers are a future release milestone. Only open an installer you obtained from this repository's release page. Check its SHA-256 against `SHA256SUMS` if needed. Checksums verify bytes, not publisher identity.
 
-Setup has three steps: **install the package**, **set up the runtime for your user**, and **enrol an app**. Installing the runtime alone does not change other applications. The first focus is chat apps that assess drafts before sending; the preview accepts all named policy categories for reporting, evaluates email-address patterns with its bundled detector, and reports unavailable checks as unevaluated. Application credentials stay private on your computer.
+Setup has three steps: **install the package**, **set up the runtime for your user**, and **enrol an app**. Installing the runtime alone does not change other applications. The first focus is chat apps that assess drafts before sending; Gandalf scores all applicable default policies and custom text locally, with an exact detector for email addresses. Normal user setup downloads verified Gandalf assets before completing. Offline installer filenames add `-offline-` after the version; these include the same weights. Add `--offline` / `-Offline` to setup to disable every network update. Application credentials stay private on your computer.
 
 ## Windows
 
@@ -50,20 +50,20 @@ The LaunchAgent starts in your login session and at subsequent logins. The app c
 
 ## Linux
 
-These packages target Intel / AMD x86_64 Linux. ARM Linux packages are not currently released. You need Python 3.11+ for user setup and a systemd user session for the managed Linux service.
+These packages target Intel / AMD x86_64 Linux with glibc 2.28+ and libstdc++6. ARM Linux packages are not currently released. You need Python 3.11+ for user setup and a systemd user session for the managed Linux service.
 
 Install the downloaded file from your Downloads directory, replacing the versioned filename with the one you downloaded.
 
 Ubuntu / Debian:
 
 ```sh
-sudo apt install ./e2em-runtime-0.1.1-x86_64-unknown-linux-musl.deb
+sudo apt install ./e2em-runtime-0.1.2-x86_64-unknown-linux-musl.deb
 ```
 
 Fedora:
 
 ```sh
-sudo dnf install ./e2em-runtime-0.1.1-x86_64-unknown-linux-musl.rpm
+sudo dnf install ./e2em-runtime-0.1.2-x86_64-unknown-linux-musl.rpm
 ```
 
 Then set up and start the runtime as your normal user:
@@ -82,9 +82,16 @@ The app credential file is `~/.config/e2em/apps/my-app.json`. The runtime proces
 
 `my-app` is the application principal used by the [SDK examples](SDK.md). Enrol another slug for each app; re-enrolling rotates its secret. SDKs read the resulting credential file from your computer. They do not obtain credentials from web pages.
 
-See [Python](../sdk/python/README.md), [Node / TypeScript](../sdk/node/README.md), or [embedded C/C++](../crates/e2em-ffi/README.md). Start with the [chat integration guide](SDK.md) and its [chat policy](../examples/chat-policy.json). The native service accepts named categories in personal warning/review policies. Its bundled backend evaluates `pii.email`; other checks return an indeterminate report with unevaluated rule IDs. Custom policy text and platform authority remain unsupported.
+See [Python](../sdk/python/README.md), [Node / TypeScript](../sdk/node/README.md), or [embedded C/C++](../crates/e2em-ffi/README.md). Start with the [message-first SDK examples](SDK.md). Send a message, add optional context, and use all presets by default; policy files are optional. The native service accepts named categories in personal warning/review policies. The default model is Gandalf. Missing conversation and token truncation return incomplete coverage; supported custom models can be selected in the SDK. See [model provisioning and updates](runtime/MODELS.md). Platform authority remains unsupported.
 
 ## Upgrade or remove
+
+User setup enables [idle background runtime updates](runtime/UPDATING.md).
+Checks and downloads wait for 60 seconds without runtime work; completed
+updates restart after outstanding requests and replies finish. Updates preserve
+grants and credentials. Use `--update-status` or `--update-check-now` with the
+grants path to inspect or request a check. Setup supports `--no-auto-update`
+(Windows: `-NoAutoUpdate`) for installations that should stay offline.
 
 **Upgrade:** stop the runtime, install the new package, then restart it. Private credentials and grants survive package replacement. Do not repeat the initial `install` user setup over an existing installation.
 
@@ -98,10 +105,10 @@ For exact removal commands, macOS PKG receipt handling, source installations, an
 | --- | --- |
 | No runtime files in the release | Read the release notes; source archives and SDK files are separate from installers. |
 | Setup says it is already installed | Follow the upgrade steps; user setup refuses to overwrite an existing installation. |
-| `MODEL_UNAVAILABLE` | Check the runtime is running, the app is enrolled, and its credentials match this provider. The error code also covers unavailable rules-only providers. |
+| `MODEL_UNAVAILABLE` | Check the runtime is running, the app is enrolled, and its credentials match this provider. Check `--model-status` with the grants path to verify that the selected model is installed. |
 | Policy reference stops working after restart | Reconnect and validate the policy again; references belong to one provider instance. |
 | App cannot access the endpoint from a sandbox | Shared access is not promised for sandboxed apps; use an embedded integration where permitted. |
 | Unevaluated category | The category was accepted, but its detector or model is unavailable. Check `coverage.unevaluated_rules` and reason codes. |
-| Unsupported rule or profile | Custom policy text and platform authority remain unsupported. Read `capabilities()` and check policy structure. |
+| Unsupported rule or profile | Platform authority and block actions remain unsupported. Check policy structure and the provider capabilities. |
 
 When reporting a problem, include your OS, release version, command, and fixed error code. Omit credentials and message contents.

@@ -2,6 +2,11 @@ import {valid} from './schema.js';
 import responseSchema from './response.schema.json' with {type:'json'};
 import net from 'node:net';
 import fs from 'node:fs/promises';
+import {constants} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {messageRequest} from './message.js';
+export {presets} from './message.js';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 const MAX_FRAME = 131072;
 export class E2EMError extends Error {
@@ -85,7 +90,7 @@ export class Client {
     const prefix = Buffer.alloc(4); prefix.writeUInt32BE(bytes.length);
     this.socket.write(Buffer.concat([prefix,bytes]));
   }
-  static async open({socketPath, principal, secret, provider}) {
+  static async open({socketPath, principal, secret, provider, model}) {
     try {
     if (process.platform === 'win32') {
       if (typeof socketPath !== 'string' || socketPath.length > 200 || !/^\\\\\.\\pipe\\e2em-[A-Za-z0-9-]+$/.test(socketPath)) throw new E2EMError('MODEL_UNAVAILABLE');
@@ -108,8 +113,27 @@ export class Client {
       const capabilities = await client.capabilities();
       if (capabilities.api_version !== '0.1' || !capabilities.backend_ready) throw new E2EMError('MODEL_UNAVAILABLE');
       client.capabilityManifest = capabilities;
+      client.model = model;
       return client;
     } catch (error) { client.close(); throw error instanceof E2EMError ? error : new E2EMError('MODEL_UNAVAILABLE'); }
+  }
+  static async connect({app = 'my-app', configPath, model} = {}) {
+    let file;
+    let connection;
+    try {
+      if (typeof app !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(app)) throw 0;
+      configPath ??= process.platform === 'win32'
+        ? path.join(process.env.LOCALAPPDATA, 'E2EM', `app-${app}.json`)
+        : path.join(os.homedir(), '.config/e2em/apps', `${app}.json`);
+      file = await fs.open(configPath, constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW));
+      const metadata = await file.stat();
+      if (!metadata.isFile() || metadata.size > 16384 || (process.platform !== 'win32' && (metadata.uid !== process.getuid() || metadata.mode & 0o077))) throw 0;
+      const config = JSON.parse(await file.readFile('utf8'));
+      if (['socket_path', 'principal', 'secret', 'provider'].some(key => typeof config[key] !== 'string' || !config[key]) || config.principal !== app) throw 0;
+      connection = {socketPath: config.socket_path, principal: config.principal, secret: config.secret, provider: config.provider, model};
+    } catch { throw new E2EMError('MODEL_UNAVAILABLE'); }
+    finally { await file?.close(); }
+    return this.open(connection);
   }
   static async discover(candidates, requiredDetectors, pinned) {
     const order = {native:0,project:1,embedded:2};
@@ -144,20 +168,40 @@ export class Client {
   }
   async capabilities() { return (await this.call({op:'capabilities'},'capabilities')).capabilities; }
   async validatePolicy(policy) { return (await this.call({op:'validate_policy',policy},'policy')).policy_ref; }
-  async assess(request, {signal} = {}) {
+  async models() { return this.call({op:'models'},'models'); }
+  async installModel(source, {name = 'custom', autoUpdate = false} = {}) { return this.call({op:'install_model',source,name,auto_update:autoUpdate},'models',900000); }
+  async assess(request, {signal, context, policies, customPolicies, model = this.model, deadlineMs} = {}) {
     if (signal?.aborted) throw new E2EMError('CANCELLED');
+    const textRequest = typeof request === 'string';
+    if (textRequest) {
+      try { request = messageRequest(request, {context, policies, customPolicies, model, deadlineMs}); }
+      catch { throw new E2EMError('INVALID_REQUEST'); }
+    } else if (context !== undefined || policies !== undefined || customPolicies !== undefined) throw new E2EMError('INVALID_REQUEST');
     const original = structuredClone(request);
+    if (model !== undefined) original.options = {...original.options, model: original.options?.model ?? model};
     const abort = () => { this.cancel(original.request_id).catch(()=>{}); };
     signal?.addEventListener('abort',abort,{once:true});
     try {
-      const reply = await this.call({op:'assess',request:original},'assessment',original.options?.deadline_ms ?? 1000);
+      const reply = await this.call({op:'assess',request:original},'assessment',(original.options?.deadline_ms ?? 15000) + 1000);
       if (signal?.aborted) throw new E2EMError('CANCELLED');
       const result = validateAssessment(reply.assessment,original);
       const saved = snapshot(original);
-      return freeze({...result, appliesTo: current => saved === snapshot(current)});
+      const details = textRequest ? {
+        scores: Object.fromEntries(result.findings.filter(finding => finding.score !== null).map(finding => [finding.category ?? finding.rule_id, finding.score])),
+        unevaluated: result.coverage.unevaluated_rules.map(id => original.policy.rules.find(rule => rule.id === id)?.category ?? id),
+      } : {};
+      const assessment = {...result, ...details, appliesTo: current => saved === snapshot(current)};
+      if (textRequest) Object.defineProperty(assessment, 'request', {value: freeze(original), enumerable: false});
+      return freeze(assessment);
     } catch (error) { if (!this.closed) await this.cancel(original.request_id).catch(()=>{}); throw error; }
     finally { signal?.removeEventListener('abort',abort); }
   }
   async cancel(request_id) { return (await this.call({op:'cancel',request_id},'cancelled')).accepted; }
   close() { this.fail('MODEL_UNAVAILABLE'); }
+}
+
+export async function assess(message, options = {}) {
+  const client = await Client.connect(options);
+  try { return await client.assess(message, options); }
+  finally { client.close(); }
 }

@@ -4,6 +4,13 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('install','enrol','revoke','uninstall')][string]$Action,
     [string]$Binary,
     [switch]$UsePackagedBinary,
+    [switch]$NoAutoUpdate,
+    [switch]$RulesOnly,
+    [switch]$Offline,
+    [switch]$ModelManagement,
+    [string]$ModelSource,
+    [string]$ModelWorker,
+    [string]$ModelLibrary,
     [string]$InstallDirectory,
     [ValidatePattern('^[a-zA-Z0-9_-]{1,64}$')][string]$Principal
 )
@@ -58,12 +65,12 @@ function Protect-Path([string]$Path, [bool]$Directory) {
     }
     Set-Acl -LiteralPath $Path -AclObject $Acl
 }
-function Assert-PrivatePath([string]$Path, [bool]$Directory) {
+function Assert-PrivatePath([string]$Path, [bool]$Directory, [bool]$AllowInheritance = $false) {
     $Item = Get-Item -LiteralPath $Path -Force
     if ($Item.PSIsContainer -ne $Directory -or ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Invalid private installation path' }
     $Acl = Get-Acl -LiteralPath $Path
     if ($Acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $UserSid.Value) { throw 'Installation path belongs to another user' }
-    if (-not $Acl.AreAccessRulesProtected) { throw 'Installation ACL must disable inheritance' }
+    if (-not $AllowInheritance -and -not $Acl.AreAccessRulesProtected) { throw 'Installation ACL must disable inheritance' }
     $OwnerAllowed = $false
     foreach ($Rule in $Acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
         if ($Rule.AccessControlType -eq 'Allow') {
@@ -107,7 +114,26 @@ if ($Action -eq 'install') {
     $InstallMarker = @{version=1; platform='windows'}
     if ($UsePackagedBinary) { $InstallMarker.packaged_binary = $Executable }
     Save-Json $Marker $InstallMarker
-    Write-Output "Installed prototype. Run in your user session: & '$Executable' --pipe '$PipeName' --grants '$GrantsPath'"
+    if (-not $RulesOnly) {
+        $Backend = Split-Path -Parent ([IO.Path]::GetFullPath($Binary))
+        if (-not $ModelWorker) { $ModelWorker = Join-Path $Backend 'e2em-inference.exe' }
+        if (-not $ModelLibrary) { $ModelLibrary = Join-Path $Backend 'onnxruntime.dll' }
+        $Bundled = Join-Path $Backend 'models/gandalf'
+        if (-not $ModelSource) { $ModelSource = if (Test-Path -LiteralPath $Bundled -PathType Container) { $Bundled } else { 'gandalf' } }
+        if ($Offline -and -not (Test-Path -LiteralPath $ModelSource -PathType Container)) { throw 'Offline setup requires a local model package' }
+        $ModelArgs = @('--grants', $GrantsPath)
+        if ($Offline) { $ModelArgs += '--offline' }
+        & $Executable @ModelArgs --model-init --model-worker ([IO.Path]::GetFullPath($ModelWorker)) --model-library ([IO.Path]::GetFullPath($ModelLibrary))
+        if ($LASTEXITCODE -ne 0) { throw 'Model store initialization failed' }
+        $InstallArgs = @('--model-install', $ModelSource)
+        if ($Offline -or $NoAutoUpdate) { $InstallArgs += '--model-no-update' }
+        & $Executable @ModelArgs @InstallArgs
+        if ($LASTEXITCODE -ne 0) { throw "Model provisioning failed. Resume with: & '$Executable' --grants '$GrantsPath' --model-install '$ModelSource'" }
+    }
+    $UpdateArgument = if ($NoAutoUpdate -or $Offline) { '' } else { ' --auto-update' }
+    if ($Offline) { $UpdateArgument += ' --offline' }
+    if ($RulesOnly) { $UpdateArgument += ' --rules-only' }
+    Write-Output "Installed. Run in your user session: & '$Executable' --pipe '$PipeName' --grants '$GrantsPath'$UpdateArgument"
     exit
 }
 Assert-PrivatePath $Root $true
@@ -132,6 +158,28 @@ if ($Action -eq 'uninstall') {
     $Managed = @($GrantsPath, $Marker)
     if (-not $Packaged) { $Managed += $Executable }
     foreach ($Path in $Managed) { Remove-Item -LiteralPath $Path }
+    $Models = Join-Path $Root 'models'
+    if (Test-Path -LiteralPath $Models) {
+        Assert-PrivatePath $Models $true $true
+        # Remove only the owned model store after rejecting reparse points.
+        foreach ($Item in @(Get-ChildItem -LiteralPath $Models -Recurse -Force)) {
+            if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Model store contains a reparse point' }
+        }
+        Remove-Item -LiteralPath $Models -Recurse
+    }
+    $ModelsConfig = Join-Path $Root 'models.json'
+    if (Test-Path -LiteralPath $ModelsConfig) { Remove-Item -LiteralPath $ModelsConfig }
+    $Updates = Join-Path $Root 'updates'
+    if (Test-Path -LiteralPath $Updates) {
+        Assert-PrivatePath $Updates $true $true
+        foreach ($File in @(Get-ChildItem -LiteralPath $Updates -Force)) {
+            if (-not $File.PSIsContainer -and ($File.Name.StartsWith('.e2em-update-') -or $File.Name -in @('state.json','status.json','supervisor.lock','check-request.json') -or
+                $File.Name -match '^e2emd-\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?\.exe$')) {
+                Remove-Item -LiteralPath $File.FullName
+            }
+        }
+        if (-not (Get-ChildItem -LiteralPath $Updates -Force)) { Remove-Item -LiteralPath $Updates }
+    }
     if (-not (Get-ChildItem -LiteralPath $Root -Force)) { Remove-Item -LiteralPath $Root }
     Write-Output 'Removed managed prototype files.'
     exit
@@ -148,7 +196,9 @@ if ($Action -eq 'revoke') {
 }
 if ($Registry.grants.Count -ge 64) { throw 'Grant limit reached' }
 $Secret = New-Secret
-$Registry.grants += @{principal=$Principal; sid=$UserSid.Value; secret=$Secret}
+$Grant = @{principal=$Principal; sid=$UserSid.Value; secret=$Secret}
+if ($ModelManagement) { $Grant.model_management = $true }
+$Registry.grants += $Grant
 Save-Json $GrantsPath $Registry
 Save-Json $Credential @{kind='project'; socket_path=$PipeName; provider=$Registry.provider; principal=$Principal; secret=$Secret}
 Write-Output "Private credentials: $Credential"

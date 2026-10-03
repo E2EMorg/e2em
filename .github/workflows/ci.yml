@@ -40,7 +40,7 @@ jobs:
       - run: |
           cargo run --locked --example export_runtime_schema
           python3 scripts/generate_runtime_bindings.py
-          git diff --exit-code -- docs/runtime/schemas sdk/node/contract.d.ts sdk/node/response.schema.json sdk/python/e2em/types.py sdk/python/e2em/response.schema.json
+          git diff --exit-code -- docs/runtime/schemas sdk/node/contract.d.ts sdk/node/response.schema.json sdk/python/e2em/types.py sdk/python/e2em/response.schema.json sdk/node/presets.json sdk/python/e2em/presets.json
 
   python:
     runs-on: ubuntu-latest

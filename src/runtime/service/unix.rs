@@ -54,6 +54,26 @@ impl Drop for Endpoint {
 /// Refuses existing endpoints. Service managers remove an owned stale socket
 /// explicitly after verifying the old process has stopped.
 pub async fn serve(socket: &Path, grants_path: &Path, idle: Duration) -> std::io::Result<()> {
+    serve_with_updates(socket, grants_path, idle, None)
+        .await
+        .map(|_| ())
+}
+pub async fn serve_with_updates(
+    socket: &Path,
+    grants_path: &Path,
+    idle: Duration,
+    updater: Option<super::super::update::Updater>,
+) -> std::io::Result<bool> {
+    serve_with_models(socket, grants_path, idle, updater, None, false).await
+}
+pub async fn serve_with_models(
+    socket: &Path,
+    grants_path: &Path,
+    idle: Duration,
+    mut updater: Option<super::super::update::Updater>,
+    models: Option<super::super::models::Manager>,
+    offline: bool,
+) -> std::io::Result<bool> {
     read_grants(grants_path)?;
     let parent = socket
         .parent()
@@ -99,10 +119,27 @@ pub async fn serve(socket: &Path, grants_path: &Path, idle: Duration) -> std::io
         path: socket.into(),
         inode: std::fs::symlink_metadata(socket)?.ino(),
     };
-    let scheduler = Arc::new(Scheduler::new(idle));
+    let scheduler = Arc::new(match &models {
+        Some(manager) => Scheduler::with_models(idle, manager.clone())?,
+        None => Scheduler::new(idle),
+    });
+    let activity = updater
+        .as_ref()
+        .map(|u| u.activity.clone())
+        .unwrap_or_default();
+    if let Some(updater) = &updater {
+        updater.mark_ready()?;
+    }
+    let mut update_tick = tokio::time::interval(Duration::from_secs(1));
+    let mut model_tick = tokio::time::interval(Duration::from_secs(60));
+    let model_stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut model_task: Option<tokio::task::JoinHandle<std::io::Result<()>>> = None;
+    let mut tasks = tokio::task::JoinSet::new();
+    let mut restarting = false;
     let connections = Arc::new(Semaphore::new(32));
     let mut termination =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
     let mut pressure =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined1())?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -119,7 +156,23 @@ pub async fn serve(socket: &Path, grants_path: &Path, idle: Duration) -> std::io
     let os_pressure = None;
     loop {
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => break,
+            _ = model_tick.tick(), if models.is_some() && !offline => {
+                if model_task.as_ref().is_some_and(|t| t.is_finished())
+                    && let Some(task) = model_task.take() && let Ok(Err(error)) = task.await { eprintln!("model update deferred: {error}"); }
+                if model_task.is_none() && activity.idle_for(Duration::from_secs(60)) {
+                    let manager = models.as_ref().unwrap().clone(); let activity = activity.clone(); let stop = model_stop.clone();
+                    model_task = Some(tokio::task::spawn_blocking(move || manager.check_updates(false, &|| {
+                        if !stop.load(std::sync::atomic::Ordering::Acquire) && activity.idle_for(Duration::from_secs(60)) { Ok(()) }
+                        else { Err(std::io::Error::from(std::io::ErrorKind::Interrupted)) }
+                    })));
+                }
+            },
+            _ = update_tick.tick(), if updater.is_some() => {
+                if updater.as_ref().is_some_and(|u| !u.parent_alive()) { break; }
+                if updater.as_mut().is_some_and(|u| u.poll()) { restarting = true; break; }
+            },
+            _ = tasks.join_next(), if !tasks.is_empty() => {},
+            _ = interrupt.recv() => break,
             _ = termination.recv() => break,
             _ = pressure.recv() => { scheduler.memory_pressure(); },
             event = super::pressure::wait_optional(&os_pressure) => {
@@ -136,14 +189,18 @@ pub async fn serve(socket: &Path, grants_path: &Path, idle: Duration) -> std::io
                 let (stream, _) = connection?;
                 let Ok(permit) = connections.clone().try_acquire_owned() else { continue; };
                 let scheduler = scheduler.clone(); let grants_path = grants_path.to_owned();
-                tokio::spawn(async move {
+                let activity = activity.clone();
+                let models = models.clone();
+                tasks.spawn(async move {
                     let _permit = permit;
                     if let Ok(peer) = stream.peer_cred() {
-                        let _ = connection_loop(stream, peer.uid(), read_grants, grants_path, scheduler).await;
+                        let _ = connection_loop(stream, peer.uid(), read_grants, grants_path, scheduler, activity, models).await;
                     }
                 });
             }
         }
     }
-    Ok(())
+    tasks.shutdown().await;
+    model_stop.store(true, std::sync::atomic::Ordering::Release);
+    Ok(restarting)
 }

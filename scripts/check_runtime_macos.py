@@ -41,7 +41,9 @@ async def check(args):
                                           "provider": label, "secret": "b" * 64}))
         credential.chmod(0o600)
         agent = directory / "agent.plist"
-        agent.write_bytes(plistlib.dumps(launch_agent(args.binary.resolve(), socket, grants, label, 1)))
+        configuration = launch_agent(args.binary.resolve(), socket, grants, label, 1, auto_update=False)
+        configuration["ProgramArguments"].append("--rules-only")
+        agent.write_bytes(plistlib.dumps(configuration))
         agent.chmod(0o600)
         started = False
         node = None

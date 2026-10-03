@@ -1,7 +1,7 @@
 """Build unsigned runtime DEB/RPM/PKG/MSI artifacts with native packaging tools.
 
-Payloads contain no model, grants, secrets, startup hooks or diagnostic workers.
-Package managers own executables; user setup references them without copying.
+Normal installers contain the native backend; offline installers also contain
+Gandalf. Package managers own executables; user setup provisions private models.
 """
 import argparse
 import hashlib
@@ -77,7 +77,7 @@ def copy(source, destination, mode=0o644):
     destination.chmod(mode)
 
 
-def stage_payload(binary, platform, stage):
+def stage_payload(binary, platform, stage, inference_dir=None, model_package=None):
     if platform == 'windows':
         copy(binary, stage / 'e2emd.exe', 0o755)
         copy(ROOT / 'scripts/install_windows_runtime.ps1', stage / 'install_windows_runtime.ps1')
@@ -93,6 +93,28 @@ def stage_payload(binary, platform, stage):
     copy(ROOT / 'LICENSE', docs / 'LICENSE')
     copy(ROOT / 'docs/runtime/PACKAGING.md', docs / 'PACKAGING.md')
     copy(ROOT / 'docs/runtime/DESKTOP.md', docs / 'DESKTOP.md')
+    if inference_dir:
+        backend = stage if platform == 'windows' else stage / ('usr' if platform == 'linux' else 'usr/local') / 'libexec/e2em'
+        worker = 'e2em-inference.exe' if platform == 'windows' else 'e2em-inference'
+        library = 'onnxruntime.dll' if platform == 'windows' else 'libonnxruntime.dylib' if platform == 'macos' else 'libonnxruntime.so'
+        for name in (worker, library, 'ONNXRUNTIME-LICENSE', 'ONNXRUNTIME-ThirdPartyNotices.txt'):
+            if not (inference_dir / name).is_file(): raise ValueError('incomplete native inference payload')
+        for path in inference_dir.iterdir():
+            if not path.is_file() or path.is_symlink(): raise ValueError('invalid native inference asset')
+            copy(path, backend / path.name, 0o755 if path.name == worker else 0o644)
+        copy(ROOT / 'docs/runtime/MODELS.md', docs / 'MODELS.md')
+        if platform != 'windows': copy(ROOT / 'scripts/setup_models.py', docs / 'setup_models.py')
+    if model_package:
+        descriptor = json.loads((model_package / 'model.json').read_text(encoding="utf-8"))
+        if descriptor['manifest']['id'] != 'gandalf' or descriptor['manifest']['license'] != 'MIT':
+            raise ValueError('offline payload must contain the approved Gandalf package')
+        for name, asset in descriptor['manifest']['files'].items():
+            if Path(name).name != name: raise ValueError('model filename escapes package')
+            path = model_package / name
+            if path.stat().st_size != asset['bytes'] or digest(path) != asset['sha256']:
+                raise ValueError('offline model asset failed verification')
+            copy(path, docs / 'models/gandalf' / name)
+        copy(model_package / 'model.json', docs / 'models/gandalf/model.json')
 
 
 def deb_control(version, architecture, stage):
@@ -103,13 +125,13 @@ Section: utils
 Priority: optional
 Architecture: {architecture}
 Installed-Size: {(size + 1023) // 1024}
-Depends: python3 (>= 3.11)
+Depends: python3 (>= 3.11), libc6 (>= 2.28), libstdc++6
 Recommends: systemd
 Maintainer: E2EM Project <noreply@e2em.org>
 Homepage: https://e2em.org
-Description: Local rules-only E2EM developer runtime
- Per-user authenticated message assessment with personal email warnings.
- Enrolment and service startup are explicit. No contextual model is included.
+Description: Local E2EM runtime with native Gandalf inference
+ Per-user authenticated message assessment with custom model support.
+ Enrolment and service startup are explicit.
 """
 
 
@@ -117,7 +139,7 @@ def rpm_spec(version, architecture):
     return f"""Name: e2em-runtime
 Version: {version}
 Release: 1
-Summary: Local rules-only E2EM developer runtime
+Summary: Local E2EM runtime with native Gandalf inference
 License: MIT
 URL: https://e2em.org
 BuildArch: {architecture}
@@ -127,8 +149,8 @@ Recommends: systemd
 %global debug_package %{{nil}}
 %global __brp_strip %{{nil}}
 %description
-Per-user authenticated message assessment with personal email warnings.
-Enrolment and service startup are explicit. No contextual model is included.
+Per-user authenticated message assessment with custom model support.
+Enrolment and service startup are explicit.
 %prep
 %build
 %install
@@ -136,8 +158,8 @@ mkdir -p %{{buildroot}}/usr
 cp -a %{{_sourcedir}}/payload/usr/. %{{buildroot}}/usr/
 %files
 %attr(0755,root,root) /usr/bin/e2emd
-%dir /usr/share/e2em
-%attr(0644,root,root) /usr/share/e2em/*
+/usr/share/e2em
+/usr/libexec/e2em
 """
 
 
@@ -155,14 +177,30 @@ def wix_source(version, stage):
     directory = element(package, 'StandardDirectory', Id='LocalAppDataFolder')
     folder = element(directory, 'Directory', Id='INSTALLFOLDER', Name='E2EM Runtime')
     feature = element(package, 'Feature', Id='Runtime', Title='E2EM Runtime', Level='1')
-    for index, source in enumerate(sorted(stage.iterdir())):
+    folders = {'.': folder}
+    remove_folders = set()
+    for index, source in enumerate(sorted(p for p in stage.rglob('*') if p.is_file())):
+        relative = source.relative_to(stage)
+        parent = folder
+        prefix = Path()
+        for part in relative.parent.parts:
+            prefix /= part
+            key = prefix.as_posix()
+            if key not in folders:
+                folders[key] = element(parent, 'Directory', Id='Dir' + hashlib.sha256(key.encode()).hexdigest()[:16], Name=part)
+            parent = folders[key]
         # Per-user files need an HKCU registry keypath (ICE38). WiX cannot
         # auto-generate GUIDs for components combining files and registry keys.
-        guid = str(uuid.uuid5(uuid.UUID(UPGRADE_CODE), 'x64:' + source.name)).upper()
-        component = element(folder, 'Component', Id=f'Payload{index}', Guid=guid, Bitness='always64')
+        guid = str(uuid.uuid5(uuid.UUID(UPGRADE_CODE), 'x64:' + relative.as_posix())).upper()
+        component = element(parent, 'Component', Id=f'Payload{index}', Guid=guid, Bitness='always64')
+        for path in [relative.parent, *relative.parent.parents]:
+            key = path.as_posix()
+            if key != '.' and key not in remove_folders:
+                element(component, 'RemoveFolder', Id='Remove' + hashlib.sha256(key.encode()).hexdigest()[:16], Directory=folders[key].get('Id'), On='uninstall')
+                remove_folders.add(key)
         element(component, 'File', Id=f'File{index}', Source=str(source), KeyPath='no')
         element(component, 'RegistryValue', Root='HKCU', Key=r'Software\E2EM\Runtime',
-                Name=source.name, Type='integer', Value='1', KeyPath='yes')
+                Name=relative.as_posix(), Type='integer', Value='1', KeyPath='yes')
         if index == 0:
             element(component, 'RegistryValue', Root='HKCU', Key=r'Software\E2EM\Runtime',
                     Name='Version', Type='string', Value=version)
@@ -171,7 +209,7 @@ def wix_source(version, stage):
     return ET.tostring(wix, encoding='unicode', xml_declaration=True)
 
 
-def build(format_name, binary, target, output, version, stage_only=False):
+def build(format_name, binary, target, output, version, stage_only=False, inference_dir=None, model_package=None, offline=False):
     version = version_value(version)
     platform, deb_arch, rpm_arch = TARGETS[target]
     if format_name not in {'linux': {'deb', 'rpm'}, 'macos': {'pkg'}, 'windows': {'msi'}}[platform]:
@@ -182,7 +220,8 @@ def build(format_name, binary, target, output, version, stage_only=False):
     verify_binary(binary, target)
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    name = f'e2em-runtime-{version}-{target}.{format_name}'
+    if offline and not model_package: raise ValueError('offline installer needs the verified Gandalf package')
+    name = f'e2em-runtime-{version}{"-offline" if offline else ""}-{target}.{format_name}'
     artifact = output / name
     if artifact.exists() or (output / (name + '.json')).exists():
         raise ValueError('refusing to overwrite existing package artifacts')
@@ -190,7 +229,7 @@ def build(format_name, binary, target, output, version, stage_only=False):
         work = Path(temporary)
         stage = work / 'payload'
         stage.mkdir()
-        stage_payload(binary, platform, stage)
+        stage_payload(binary, platform, stage, inference_dir, model_package if offline else None)
         if format_name == 'deb':
             (stage / 'DEBIAN').mkdir()
             (stage / 'DEBIAN/control').write_text(deb_control(version, deb_arch, stage))
@@ -228,7 +267,7 @@ def build(format_name, binary, target, output, version, stage_only=False):
     metadata = {'name': name, 'version': version, 'target': target, 'format': format_name,
                 'sha256': digest(artifact), 'binary_sha256': digest(binary), 'signed': False,
                 'scope': 'package payload only; per-user enrolment/startup is explicit',
-                'model_included': False}
+                'model_included': offline, 'native_inference': bool(inference_dir)}
     (output / (name + '.json')).write_text(json.dumps(metadata, indent=2) + '\n')
     (output / (name + '.sha256')).write_text(f'{metadata["sha256"]}  {name}\n')
     return artifact
@@ -242,8 +281,11 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--version', default=tomllib.loads((ROOT / 'Cargo.toml').read_text(encoding="utf-8"))['package']['version'])
     parser.add_argument('--stage-only', action='store_true', help='render payload/manifests without claiming a package build')
+    parser.add_argument('--inference-dir', type=Path)
+    parser.add_argument('--model-package', type=Path)
+    parser.add_argument('--offline', action='store_true')
     args = parser.parse_args()
-    print(build(args.format, args.binary, args.target, args.output, args.version, args.stage_only))
+    print(build(args.format, args.binary, args.target, args.output, args.version, args.stage_only, args.inference_dir, args.model_package, args.offline))
 
 
 if __name__ == '__main__':

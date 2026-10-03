@@ -19,6 +19,8 @@ pub struct Grant {
     pub principal: String,
     pub uid: u32,
     pub secret: String,
+    #[serde(default)]
+    pub model_management: bool,
 }
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -107,10 +109,15 @@ pub(super) async fn connection_loop<S>(
     read_grants: fn(&Path) -> std::io::Result<Grants>,
     grants_path: PathBuf,
     scheduler: Arc<Scheduler>,
+    activity: Arc<super::super::update::Activity>,
+    models: Option<super::super::models::Manager>,
 ) -> std::io::Result<()>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
+    let handshake = activity
+        .enter()
+        .ok_or_else(|| std::io::Error::other("runtime updating"))?;
     let grants = read_grants(&grants_path)?;
     let hello: Hello = serde_json::from_slice(
         &tokio::time::timeout(Duration::from_secs(5), read_frame(&mut stream)).await??,
@@ -161,6 +168,7 @@ where
         &serde_json::json!({"authenticated": true, "provider": grants.provider}),
     )
     .await?;
+    drop(handshake);
     let (mut reader, writer) = tokio::io::split(stream);
     let writer = Arc::new(Mutex::new(writer));
     let pending = Arc::new(Mutex::new(std::collections::HashSet::new()));
@@ -169,6 +177,9 @@ where
         loop {
             let frame =
                 tokio::time::timeout(Duration::from_secs(30), read_frame(&mut reader)).await??;
+            let work = activity
+                .enter()
+                .ok_or_else(|| std::io::Error::other("runtime updating"))?;
             let current = read_grants(&grants_path)?;
             if current.provider != grants.provider
                 || !current.grants.iter().any(|g| {
@@ -210,6 +221,60 @@ where
                 }
             } else {
                 match call.operation {
+                    Operation::Models => match models.as_ref().and_then(|m| m.status().ok()) {
+                        Some(status) => Reply::Models {
+                            default_model: status["default"].as_str().unwrap_or("gandalf").into(),
+                            models: serde_json::from_value(status["models"].clone())
+                                .unwrap_or_default(),
+                        },
+                        None => Reply::Error {
+                            error_code: ErrorCode::ModelUnavailable,
+                        },
+                    },
+                    Operation::InstallModel {
+                        source,
+                        name,
+                        auto_update,
+                    } => {
+                        if !current
+                            .grants
+                            .iter()
+                            .any(|g| g.principal == grant.principal && g.model_management)
+                        {
+                            Reply::Error {
+                                error_code: ErrorCode::UnsupportedPolicy,
+                            }
+                        } else if let Some(manager) = models.clone() {
+                            if source.len() > 2048 || !super::super::model::name(&name) {
+                                Reply::Error {
+                                    error_code: ErrorCode::InvalidRequest,
+                                }
+                            } else {
+                                let installed = tokio::task::spawn_blocking(move || {
+                                    manager.install(&source, &name, auto_update)?;
+                                    manager.status()
+                                })
+                                .await;
+                                match installed {
+                                    Ok(Ok(status)) => Reply::Models {
+                                        default_model: status["default"]
+                                            .as_str()
+                                            .unwrap_or("gandalf")
+                                            .into(),
+                                        models: serde_json::from_value(status["models"].clone())
+                                            .unwrap_or_default(),
+                                    },
+                                    _ => Reply::Error {
+                                        error_code: ErrorCode::ModelUnavailable,
+                                    },
+                                }
+                            }
+                        } else {
+                            Reply::Error {
+                                error_code: ErrorCode::ModelUnavailable,
+                            }
+                        }
+                    }
                     Operation::Capabilities => Reply::Capabilities {
                         capabilities: scheduler.capabilities(),
                     },
@@ -247,6 +312,7 @@ where
                                 let writer = writer.clone();
                                 let pending = pending.clone();
                                 tokio::spawn(async move {
+                                    let _work = work;
                                     let _permit = permit;
                                     let result = receive.await;
                                     let reply = match result {

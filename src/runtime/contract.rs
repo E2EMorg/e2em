@@ -66,6 +66,8 @@ impl std::error::Error for ErrorCode {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub model_thresholds: bool,
     pub id: String,
     pub directions: Vec<Direction>,
     pub r#match: Match,
@@ -81,6 +83,9 @@ pub struct Rule {
     pub review_threshold: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action_threshold: Option<f64>,
+}
+fn is_false(value: &bool) -> bool {
+    !value
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -121,18 +126,21 @@ pub struct Turn {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Options {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     #[serde(default = "default_deadline")]
     pub deadline_ms: u64,
     #[serde(default)]
     pub include_spans: bool,
 }
 fn default_deadline() -> u64 {
-    1000
+    15000
 }
 impl Default for Options {
     fn default() -> Self {
         Self {
-            deadline_ms: 1000,
+            model: None,
+            deadline_ms: 15000,
             include_spans: false,
         }
     }
@@ -254,9 +262,33 @@ pub struct Capabilities {
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
     Capabilities,
-    ValidatePolicy { policy: Policy },
-    Assess { request: Box<Request> },
-    Cancel { request_id: String },
+    Models,
+    InstallModel {
+        source: String,
+        name: String,
+        #[serde(default)]
+        auto_update: bool,
+    },
+    ValidatePolicy {
+        policy: Policy,
+    },
+    Assess {
+        request: Box<Request>,
+    },
+    Cancel {
+        request_id: String,
+    },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelInfo {
+    pub alias: String,
+    pub identity: String,
+    pub version: String,
+    pub source: String,
+    pub auto_update: bool,
+    pub last_check: u64,
+    pub rollback_available: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -268,11 +300,25 @@ pub struct Call {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Reply {
-    Capabilities { capabilities: Capabilities },
-    Policy { policy_ref: PolicyRef },
-    Assessment { assessment: Assessment },
-    Cancelled { accepted: bool },
-    Error { error_code: ErrorCode },
+    Models {
+        default_model: String,
+        models: Vec<ModelInfo>,
+    },
+    Capabilities {
+        capabilities: Capabilities,
+    },
+    Policy {
+        policy_ref: PolicyRef,
+    },
+    Assessment {
+        assessment: Assessment,
+    },
+    Cancelled {
+        accepted: bool,
+    },
+    Error {
+        error_code: ErrorCode,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

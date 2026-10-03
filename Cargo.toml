@@ -1,10 +1,10 @@
 [workspace]
-members = ["crates/e2em-ffi", "crates/e2em-platform"]
+members = ["crates/e2em-ffi", "crates/e2em-platform", "crates/e2em-inference"]
 resolver = "3"
 
 [package]
 name = "e2em-runtime"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.95"
 default-run = "e2emd"
@@ -30,17 +30,22 @@ required-features = ["runtime-probes"]
 
 [features]
 default = ["runtime-service"]
-runtime-service = ["dep:tokio", "dep:rustix", "dep:getrandom", "dep:e2em-platform"]
+runtime-service = ["dep:tokio", "dep:rustix", "dep:getrandom", "dep:e2em-platform", "dep:ureq", "dep:semver", "dep:tempfile", "dep:ed25519-dalek", "dep:fs2"]
 runtime-probes = []
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
-e2em-platform = { version = "0.1.1", path = "crates/e2em-platform", optional = true }
+e2em-platform = { version = "0.1.2", path = "crates/e2em-platform", optional = true }
 
 [dependencies]
+ed25519-dalek = { version = "2", optional = true }
+fs2 = { version = "0.4", optional = true }
 getrandom = { version = "0.4", optional = true }
 hmac = "0.12"
 schemars = "1"
-tokio = { version = "1", optional = true, features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
+tokio = { version = "1", optional = true, features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal", "process"] }
+ureq = { version = "2.12", optional = true, default-features = false, features = ["tls"] }
+semver = { version = "1", optional = true }
+tempfile = { version = "3", optional = true }
 rustix = { version = "1", optional = true, features = ["process", "net"] }
 clap = { version = "4.5", features = ["derive"] }
 regex = "1.13.1"

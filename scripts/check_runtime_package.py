@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--package', type=Path, required=True)
     parser.add_argument('--upgrade-package', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--model-source', type=Path, help='local model fixture before release URLs become public')
     args = parser.parse_args()
     expected = {'deb': 'Linux', 'rpm': 'Linux', 'pkg': 'Darwin', 'msi': 'Windows'}[args.format]
     if platform.system() != expected:
@@ -62,8 +63,11 @@ def main():
             run('msiexec.exe', '/x', upgrade, '/qn', '/norestart', '/l*v', logdir / 'remove.log')
         elif args.format == 'pkg':
             # Exact managed payload only; no recursive deletion of shared roots.
-            for path in [binary, *payload.iterdir()]:
+            for path in [*payload.rglob('*'), *binary.parent.rglob('*')]:
+                if path.is_dir(): continue
                 run('sudo', 'rm', '-f', path)
+            for path in sorted([p for p in payload.rglob('*') if p.is_dir()] + [p for p in binary.parent.rglob('*') if p.is_dir()], key=lambda p: len(p.parts), reverse=True):
+                run('sudo', 'rmdir', path)
             run('sudo', 'rmdir', payload, binary.parent)
             run('sudo', 'pkgutil', '--forget', 'org.e2em.runtime')
         elif args.format == 'deb':
@@ -90,19 +94,23 @@ def main():
             setup = payload / 'install_windows_runtime.ps1'
             user_config = home / 'E2EM'
             run('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', setup,
-                '-Action', 'install', '-Binary', binary, '-UsePackagedBinary', '-InstallDirectory', user_config)
+                '-Action', 'install', '-Binary', binary, '-UsePackagedBinary', '-InstallDirectory', user_config,
+                *(['-ModelSource', args.model_source.resolve()] if args.model_source else []))
             run('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', setup,
                 '-Action', 'enrol', '-Principal', 'package-check', '-InstallDirectory', user_config)
             credential = user_config / 'app-package-check.json'
         else:
             setup = payload / ('install_macos_runtime.py' if args.format == 'pkg' else 'install_runtime.py')
-            run('python3', setup, '--home', home, 'install', '--binary', binary, '--use-packaged-binary')
+            run('python3', setup, '--home', home, 'install', '--binary', binary, '--use-packaged-binary',
+                *(['--model-source', args.model_source.resolve()] if args.model_source else []))
             run('python3', setup, '--home', home, 'enrol', 'package-check')
             user_config = home / '.config/e2em'
             credential = user_config / 'apps/package-check.json'
         before = credential.read_bytes()
         grants = (user_config / 'grants.json').read_bytes()
         assert json.loads((user_config / 'installation.json').read_text(encoding="utf-8"))['packaged_binary'] == str(binary)
+        model_status = json.loads(run(binary, '--grants', user_config / 'grants.json', '--model-status').stdout)
+        assert model_status['default'] == 'gandalf' and model_status['models'][0]['identity'].startswith('gandalf@')
         install(upgrade, args.output.parent)
         run(binary, '--help')
         assert installed_version() == upgrade_version, 'package version did not advance'
@@ -131,8 +139,8 @@ def main():
         'upgrade_sha256': hashlib.sha256(upgrade.read_bytes()).hexdigest(),
         'initial_version': initial_version, 'upgraded_version': upgrade_version,
         'install': True, 'upgrade': True, 'remove': True, 'credentials_preserved': True,
-        'package_managed_binary': True, 'user_teardown': True,
-        'limits': 'Package lifecycle only; no platform sandbox/security/model qualification or signature verification.'}, indent=2) + '\n')
+        'package_managed_binary': True, 'user_teardown': True, 'model_provisioned': True,
+        'limits': 'Package lifecycle and model provisioning; inference is qualified separately.'}, indent=2) + '\n')
     print('Native package install/upgrade/remove and credential preservation passed')
 
 

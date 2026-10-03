@@ -108,6 +108,23 @@ pub fn current_user_sid() -> io::Result<String> {
     process_sid(unsafe { GetCurrentProcess() })
 }
 
+/// Read-only lifetime check for the daemon's update supervisor.
+pub fn process_alive(pid: u32) -> io::Result<bool> {
+    use windows_sys::Win32::System::Threading::GetExitCodeProcess;
+    // SAFETY: query-only access; the owned handle is closed by Handle.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if process.is_null() {
+        return Ok(false);
+    }
+    let process = Handle(process);
+    let mut status = 0;
+    // SAFETY: process is valid and status is a writable output pointer.
+    if unsafe { GetExitCodeProcess(process.0, &mut status) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(status == 259) // STILL_ACTIVE
+}
+
 pub fn verify_pipe_peer(pipe: &NamedPipeServer) -> io::Result<()> {
     let mut pid = 0;
     // SAFETY: Tokio owns a connected server pipe for the duration of this call.

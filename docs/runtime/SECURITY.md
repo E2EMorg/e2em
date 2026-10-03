@@ -68,8 +68,12 @@ HTTP listener or arbitrary native-command interface is exposed here.
 
 ## Privacy and resources
 
-Runtime code opens only explicitly configured local paths/sockets and creates no
-message files, message caches, telemetry, downloads or remote connections. Runtime
+Assessment code opens only explicitly configured local paths/sockets and creates no
+message files, message caches or telemetry. When enabled, the standalone daemon's
+[background updater](UPDATING.md) fetches release metadata, checksums and runtime
+payloads from the canonical GitHub repository over HTTPS during idle periods.
+It sends no request text, findings, policies, grants or credentials. Embedded
+hosts and daemon runs without `--auto-update` make no update connections. Runtime
 errors contain fixed codes, not input text. Results do not echo matches. The
 provider keeps policy metadata and ephemeral bounded requests/results; the app
 owns conversation/draft retention. Service diagnostics deliberately omit request

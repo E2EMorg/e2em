@@ -1,0 +1,79 @@
+{
+  "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.39",
+  "weights_sha256": "916370da013a428a8ed3e00791049d12b3b3fd5836969d8b0492bc5de372d5c8",
+  "torch": "2.14.0+cu130",
+  "transformers": "5.17.0",
+  "threads": 2,
+  "device": "cpu",
+  "load_seconds": 2.304193810094148,
+  "policy_count": 41,
+  "sequence_length": 52,
+  "batch_size": 8,
+  "scoring_seconds": [
+    0.9488912400556728,
+    1.1100883970502764,
+    0.870746184955351
+  ],
+  "finite_scores": 41,
+  "preprocessing": {
+    "max_tokens": 512,
+    "tail_tokens": 64,
+    "evidence_format": "target-first"
+  },
+  "quality_evaluation": false,
+  "onnx": {
+    "onnxruntime": "1.24.4",
+    "opset": 18,
+    "bytes": 284315095,
+    "sha256": "03c8e221a56b40eac104b885cf08eec43742fe71fbedfd2eb9d7b76bfee0c0e0",
+    "load_seconds": 1.0284582220483571,
+    "scoring_seconds": [
+      0.6222490220097825,
+      0.6029960239538923,
+      0.6030644329730421
+    ],
+    "max_absolute_logit_errors": [
+      8.58306884765625e-06,
+      1.9073486328125e-06,
+      1.9073486328125e-06,
+      2.86102294921875e-06,
+      1.430511474609375e-06
+    ],
+    "dynamic_batches_tested": [
+      1,
+      2,
+      8,
+      41
+    ],
+    "sequence_lengths_tested": [
+      52,
+      512
+    ],
+    "full_length_model_batch": {
+      "policy_count": 30,
+      "sequence_length": 512,
+      "scoring_seconds": [
+        9.22379934496712,
+        9.083994845976122,
+        9.15780791908037
+      ]
+    },
+    "passed": true
+  },
+  "recorded_at": "2026-10-03",
+  "cpu": "AMD Ryzen 9 5900X",
+  "source": {
+    "repository": "https://huggingface.co/krazyjakee/gandalf",
+    "revision": "7477acb03721e7c59cce1e12f2163c0ad33cfbfa",
+    "version": "0.0.1",
+    "critical_local_files_match_published_release_hashes": [
+      "model.safetensors",
+      "config.json",
+      "tokenizer.json",
+      "tokenizer_config.json",
+      "preset.json",
+      "distillation.json"
+    ]
+  },
+  "limits": "Synthetic CPU inference/export probe on a shared Linux host. Valid model execution and export parity do not establish category accuracy, production readiness, or Windows/macOS performance. No deployed native worker, installer, SDK model selection or update lifecycle was tested."
+}

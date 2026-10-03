@@ -2,9 +2,11 @@
 import argparse
 import asyncio
 import json
+import hashlib
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,7 +34,7 @@ async def check(args):
             except subprocess.CalledProcessError:
                 return
             raise AssertionError(f"installer unexpectedly accepted {action}")
-        manage("install", "-Binary", str(args.binary.resolve()))
+        manage("install", "-RulesOnly", "-Binary", str(args.binary.resolve()))
         expect_failure("install", "-Binary", str(args.binary.resolve()))
         process = node = None
         note_created = False
@@ -43,8 +45,18 @@ async def check(args):
             manage("enrol", "-Principal", "node")
             credential = json.loads((install / "app-python.json").read_text(encoding="utf-8"))
             assert previous["secret"] != credential["secret"]
+            # A local payload exercises activation without reaching the feed.
+            updates = install / 'updates'
+            updates.mkdir()
+            version = subprocess.check_output([str(install / 'e2emd.exe'), '--version'], text=True).strip().split()[-1]
+            payload = updates / f'e2emd-{version}.exe'
+            shutil.copyfile(install / 'e2emd.exe', payload)
+            candidate = {'version': version, 'size': payload.stat().st_size,
+                         'sha256': hashlib.sha256(payload.read_bytes()).hexdigest()}
+            (updates / 'state.json').write_text(json.dumps({'pending': candidate}))
             process = subprocess.Popen([str(install / "e2emd.exe"), "--pipe", credential["socket_path"],
-                                        "--grants", str(install / "grants.json"), "--idle-seconds", "1"],
+                                        "--grants", str(install / "grants.json"), "--rules-only","--idle-seconds", "1",
+                                        "--auto-update", "--update-idle-seconds", "3600"],
                                        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             client = None
@@ -59,6 +71,14 @@ async def check(args):
                     await asyncio.sleep(.01)
             if client is None:
                 raise RuntimeError("installed pipe did not become ready")
+            for _ in range(150):
+                if json.loads((updates / 'state.json').read_text(encoding="utf-8")).get('active') == candidate:
+                    break
+                if process.poll() is not None:
+                    raise RuntimeError('update supervisor exited during candidate probation')
+                await asyncio.sleep(.1)
+            else:
+                raise RuntimeError('verified update never completed startup probation')
             expect_failure("uninstall")
             for name in ["installation.json", "grants.json", "app-python.json", "app-node.json"]:
                 assert (install / name).is_file(), "live uninstall refusal must preserve user state"
@@ -115,6 +135,7 @@ async def check(args):
                       "node_fixtures": node_report["fixtures"], "grant_revocation": True,
                       "grant_rotation": True, "broad_grant_acl_rejected": True,
                       "overwrite_and_live_uninstall_refused": True,
+                      "background_update_activation": True,
                       "packaged_app_qualification": False}
         finally:
             if node is not None and node.returncode is None:
