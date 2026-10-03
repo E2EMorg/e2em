@@ -9,6 +9,9 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# A PowerShell 7 parent can pass its module path to Windows PowerShell 5.1.
+# Load the security commands from this host, rather than an incompatible module.
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
 $UserSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
 $SystemSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
 $Root = if ($InstallDirectory) { [IO.Path]::GetFullPath($InstallDirectory) } else { Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'E2EM' }
