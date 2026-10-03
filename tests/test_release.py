@@ -23,7 +23,7 @@ class ReleaseTest(unittest.TestCase):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / name, target)
-            self.assertEqual(release_version(root), "0.1.0")
+            self.assertEqual(release_version(root), release_version(ROOT))
             target = root / "sdk/node/package.json"
             manifest = json.loads(target.read_text())
             manifest["version"] = "0.2.0"

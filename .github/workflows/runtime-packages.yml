@@ -129,7 +129,7 @@ jobs:
           python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/runtime
           python3 scripts/package_runtime.py --format pkg --target "$TARGET" --binary "target/$TARGET/release/e2emd" --output dist/upgrade --version "$UPGRADE_VERSION"
       - name: Native PKG lifecycle
-        run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*.pkg --upgrade-package dist/upgrade/*.pkg --output "dist/reports/pkg-$TARGET.json"
+        run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*.pkg --upgrade-package dist/upgrade/*.pkg --output "dist/reports/pkg-${{ matrix.target }}.json"
       - name: Build native C SDK
         env:
           TARGET: ${{ matrix.target }}

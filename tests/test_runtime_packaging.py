@@ -124,10 +124,10 @@ class PackageSetupTest(unittest.TestCase):
                 self.assertEqual(marker['packaged_binary'], str(binary.resolve()))
                 self.assertFalse((home / '.local/bin/e2emd').exists())
                 if name == 'linux':
-                    self.assertIn('"'+str(binary)+'"', (home / '.config/systemd/user/e2emd.service').read_text())
+                    self.assertIn('"'+str(binary.resolve())+'"', (home / '.config/systemd/user/e2emd.service').read_text())
                 else:
                     agent = plistlib.loads((home / 'Library/LaunchAgents/org.e2em.runtime.plist').read_bytes())
-                    self.assertEqual(agent['ProgramArguments'][0], str(binary))
+                    self.assertEqual(agent['ProgramArguments'][0], str(binary.resolve()))
                 grants = (config / 'grants.json').read_bytes()
                 # Package upgrade overwrites only its binary, not user state.
                 binary.write_bytes(b'upgraded package')

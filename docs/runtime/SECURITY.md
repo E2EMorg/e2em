@@ -1,5 +1,9 @@
 # Local provider identity and isolation
 
+> Platform qualification notes below preserve the source checkout's preview status.
+> Current release workflow results and attached native reports show what has been
+> executed for each release. Historical issue numbers refer to the source project.
+
 The Linux preview admits owned mode-0700 endpoint directories and mode-0600 Unix
 sockets. The provider verifies SO_PEERCRED UID (Tokio peer credentials), then an
 explicit principal grant with a random 256-bit enrolment secret. Display app names

@@ -31,6 +31,10 @@ call ID so concurrent operations can complete out of order.
 
 ## Preview capability profile
 
+The first integration focus is chat drafts and their send boundary. The initial
+check detects email addresses shared in chat messages; the host owns the warning
+and confirmation flow.
+
 Only `pii.email`, the personal profile and warn/review actions are enabled.
 No contextual preset, custom rule, platform enforcement, model package or token
 classifier is advertised. `model=none`, `tokenizer=none`, `max_tokens=null` and
@@ -81,7 +85,7 @@ keep confirmation specific to that snapshot. The Rust guard and SDK examples do
 this. The application owns encryption/send/display and accessible warnings.
 Installing this provider cannot compel an application to participate or obey.
 `cargo run --locked --example runtime_chat` is an offline reference chat; it
-requires explicit continuation for the email warning and holds failures.
+requires explicit continuation when a chat message shares an email address and holds failures.
 
 ## Compatibility and acceptance mapping
 

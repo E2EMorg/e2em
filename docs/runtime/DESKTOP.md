@@ -1,9 +1,14 @@
 # Desktop developer runtime and SDKs
 
+> Platform qualification notes below preserve the source checkout's preview status.
+> Current release workflow results and attached native reports show what has been
+> executed for each release. Historical issue numbers refer to the source project.
+
 Build `cargo build --locked --workspace --all-features`. `e2emd` is feature-gated
 by `runtime-service`, with Linux Unix sockets, a macOS launchd prototype and a
-Windows named-pipe prototype. It serves
-only personal email warnings, without Python workers or model downloads.
+Windows named-pipe prototype. Its first integration focus is chat message
+assessment, currently supporting personal `pii.email` warnings for addresses
+shared in messages, without Python workers or model downloads.
 
 MSI, PKG, DEB and RPM build/lifecycle workflows are described in
 [PACKAGING.md](PACKAGING.md). Packages install the executable and user setup tools;
