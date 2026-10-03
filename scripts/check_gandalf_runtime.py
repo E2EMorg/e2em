@@ -24,7 +24,9 @@ def run(*command):
 
 async def assess(socket, registry, report):
     grant = registry['grants'][0]
-    for _ in range(100):
+    # Provisioning precedes IPC startup; slower native hosts can take more than
+    # ten seconds to copy/hash weights and finish the candidate smoke check.
+    for _ in range(900):
         try:
             client = await Client.open(socket, grant['principal'], grant['secret'], registry['provider'])
             break
@@ -108,8 +110,14 @@ def main():
         process = subprocess.Popen([str(a) for a in [*command, '--offline', option, socket, '--idle-seconds', '1']], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
             asyncio.run(assess(socket, registry, report))
-        finally:
+        except BaseException:
             process.terminate()
+            try: process.wait(timeout=10)
+            except subprocess.TimeoutExpired: process.kill(); process.wait()
+            print(process.stderr.read().decode('utf-8', errors='replace'), file=sys.stderr)
+            raise
+        finally:
+            if process.poll() is None: process.terminate()
             try: process.wait(timeout=10)
             except subprocess.TimeoutExpired: process.kill(); process.wait()
         assert json.loads(grants.read_text(encoding='utf-8')) == registry, 'provisioning changed existing grants'
