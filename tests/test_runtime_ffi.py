@@ -28,16 +28,29 @@ class Embedded(unittest.TestCase):
                 if source.endswith("cpp"):
                     result = json.loads(subprocess.check_output([str(binary)],timeout=10))
                     self.assertEqual(result["kind"],"capabilities")
-                cases = json.loads((ROOT/"tests/conformance/assessments.json").read_text())
+                cases = json.loads((ROOT/"tests/conformance/assessments.json").read_text(encoding="utf-8"))
                 for case in cases:
                     call = directory / "call.json"; call.write_text(json.dumps(dict(call_id="c",api_version="0.1",operation=dict(op="assess",request=case["request"]))))
                     result = json.loads(subprocess.check_output([str(binary),str(call)],timeout=10))["assessment"]
                     self.assertEqual(result["status"],case["expected"]["status"])
                     self.assertEqual(result["action"],case["expected"]["action"])
                     self.assertEqual([[s["start"],s["end"]] for f in result["findings"] for s in f["spans"]],case["expected"]["spans"])
-                for case in json.loads((ROOT/"tests/conformance/policy-failures.json").read_text()):
+                for case in json.loads((ROOT/"tests/conformance/policy-failures.json").read_text(encoding="utf-8")):
                     call = directory / "call.json"; call.write_text(json.dumps(dict(call_id="c",api_version="0.1",operation=dict(op="validate_policy",policy=case["policy"]))))
                     result = json.loads(subprocess.check_output([str(binary),str(call)],timeout=10))
                     self.assertEqual(result["kind"],"error")
                     self.assertEqual(result["error_code"],case["error_code"])
+                for case in json.loads((ROOT/"tests/conformance/policy-reports.json").read_text(encoding="utf-8")):
+                    call = directory / "call.json"
+                    call.write_text(json.dumps(dict(call_id="c",api_version="0.1",operation=dict(op="validate_policy",policy=case["policy"]))))
+                    result = json.loads(subprocess.check_output([str(binary),str(call)],timeout=10))
+                    self.assertEqual(result["kind"], "policy")
+                    request = json.loads(json.dumps(cases[0]["request"]))
+                    request["policy"] = case["policy"]
+                    call.write_text(json.dumps(dict(call_id="c",api_version="0.1",operation=dict(op="assess",request=request))))
+                    result = json.loads(subprocess.check_output([str(binary),str(call)],timeout=10))["assessment"]
+                    self.assertEqual(result["status"], case["expected"]["status"])
+                    self.assertEqual(result["action"], case["expected"]["action"])
+                    self.assertEqual(result["coverage"]["unevaluated_rules"], case["expected"]["unevaluated_rules"])
+                    self.assertEqual(result["reason_codes"], case["expected"]["reason_codes"])
 if __name__ == "__main__": unittest.main()

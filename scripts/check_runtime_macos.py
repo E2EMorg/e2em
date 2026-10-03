@@ -60,7 +60,7 @@ async def check(args):
             rss = lambda: int(run("ps", "-o", "rss=", "-p", pid).strip())
             unloaded = rss()
             async with await Client.open(str(socket), "python", "a" * 64, label) as client:
-                cases = json.loads((ROOT / "tests/conformance/assessments.json").read_text())
+                cases = json.loads((ROOT / "tests/conformance/assessments.json").read_text(encoding="utf-8"))
                 node = await asyncio.create_subprocess_exec(
                     "node", str(ROOT / "sdk/node/check-agent.mjs"), str(credential),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)

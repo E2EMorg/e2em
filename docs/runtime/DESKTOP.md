@@ -7,8 +7,9 @@
 Build `cargo build --locked --workspace --all-features`. `e2emd` is feature-gated
 by `runtime-service`, with Linux Unix sockets, a macOS launchd prototype and a
 Windows named-pipe prototype. Its first integration focus is chat message
-assessment, currently supporting personal `pii.email` warnings for addresses
-shared in messages, without Python workers or model downloads.
+assessment with reports for all named categories. Its bundled backend evaluates
+`pii.email`; other checks are reported as unevaluated, without Python workers or
+model downloads.
 
 MSI, PKG, DEB and RPM build/lifecycle workflows are described in
 [PACKAGING.md](PACKAGING.md). Packages install the executable and user setup tools;

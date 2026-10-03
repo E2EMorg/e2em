@@ -11,8 +11,10 @@ Build with `cargo build --locked --workspace`. Include `include/e2em.h` and link
 `e2em_ffi` as a shared or static library. C and C++ examples are in `examples/`.
 ABI 1 accepts API 0.1 values; `e2em_open(1)` returns a nonzero client handle.
 Incompatible ABI versions return 0. The first focus is assessing chat messages
-before sending; this preview supports personal warnings for email addresses shared
-in those messages (`pii.email`). No model is shipped.
+before sending. All named categories are accepted for reporting without a model
+rating gate. The bundled `pii.email` detector evaluates email-address patterns;
+unavailable checks return indeterminate/review and unevaluated rule IDs.
+Custom policy text remains unsupported. No model is shipped.
 
 Call `e2em_call(client, bytes, length)` with UTF-8 Call JSON, as defined by the
 runtime schema. The input is copied/deserialized during the call; the caller

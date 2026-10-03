@@ -120,11 +120,11 @@ class PackageSetupTest(unittest.TestCase):
                 installer.main(['--home', str(home), 'install', '--binary', str(binary), '--use-packaged-binary'])
                 installer.main(['--home', str(home), 'enrol', 'app'])
                 config = home / '.config/e2em'
-                marker = json.loads((config / 'installation.json').read_text())
+                marker = json.loads((config / 'installation.json').read_text(encoding="utf-8"))
                 self.assertEqual(marker['packaged_binary'], str(binary.resolve()))
                 self.assertFalse((home / '.local/bin/e2emd').exists())
                 if name == 'linux':
-                    self.assertIn('"'+str(binary.resolve())+'"', (home / '.config/systemd/user/e2emd.service').read_text())
+                    self.assertIn('"'+str(binary.resolve())+'"', (home / '.config/systemd/user/e2emd.service').read_text(encoding="utf-8"))
                 else:
                     agent = plistlib.loads((home / 'Library/LaunchAgents/org.e2em.runtime.plist').read_bytes())
                     self.assertEqual(agent['ProgramArguments'][0], str(binary.resolve()))

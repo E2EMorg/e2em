@@ -240,7 +240,7 @@ def main():
     parser.add_argument('--target', choices=TARGETS, required=True)
     parser.add_argument('--binary', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--version', default=tomllib.loads((ROOT / 'Cargo.toml').read_text())['package']['version'])
+    parser.add_argument('--version', default=tomllib.loads((ROOT / 'Cargo.toml').read_text(encoding="utf-8"))['package']['version'])
     parser.add_argument('--stage-only', action='store_true', help='render payload/manifests without claiming a package build')
     args = parser.parse_args()
     print(build(args.format, args.binary, args.target, args.output, args.version, args.stage_only))

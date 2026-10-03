@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def release_version(root=ROOT):
     versions = {}
     for name in ("Cargo.toml", "crates/e2em-ffi/Cargo.toml", "crates/e2em-platform/Cargo.toml"):
-        versions[name] = tomllib.loads((root / name).read_text())["package"]["version"]
-    versions["sdk/python/pyproject.toml"] = tomllib.loads((root / "sdk/python/pyproject.toml").read_text())["project"]["version"]
-    versions["sdk/node/package.json"] = json.loads((root / "sdk/node/package.json").read_text())["version"]
+        versions[name] = tomllib.loads((root / name).read_text(encoding="utf-8"))["package"]["version"]
+    versions["sdk/python/pyproject.toml"] = tomllib.loads((root / "sdk/python/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    versions["sdk/node/package.json"] = json.loads((root / "sdk/node/package.json").read_text(encoding="utf-8"))["version"]
     if len(set(versions.values())) != 1:
         raise ValueError(f"runtime and SDK versions differ: {versions}")
     version = versions["Cargo.toml"]
@@ -67,7 +67,7 @@ def verify_assets(directory, version):
             raise ValueError(f"missing or empty release asset: {name}")
     for name in names[:5]:
         path = directory / name
-        metadata = json.loads(Path(str(path) + ".json").read_text())
+        metadata = json.loads(Path(str(path) + ".json").read_text(encoding="utf-8"))
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         if metadata["version"] != version or metadata["sha256"] != digest:
             raise ValueError(f"installer metadata mismatch: {name}")

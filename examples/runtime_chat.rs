@@ -3,7 +3,11 @@ use e2em_runtime::runtime::{integration::RevisionGuard, scheduler::Scheduler, *}
 use std::io::{self, Write};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scheduler = Scheduler::default();
-    let policy: Policy = serde_json::from_str(include_str!("chat-policy.json"))?;
+    let policy: Policy = match std::env::args().nth(1) {
+        Some(path) => serde_json::from_str(&std::fs::read_to_string(path)?)?,
+        None => serde_json::from_str(include_str!("chat-policy.json"))?,
+    };
+    validate_policy(&policy)?;
     let mut revision = 0;
     println!("E2EM reference chat — offline; messages stay local.");
     loop {
@@ -35,9 +39,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let result = scheduler
             .submit("reference-chat", request.clone())?
             .wait()?;
+        for finding in &result.findings {
+            if let Some(score) = finding.score {
+                println!(
+                    "Category {}: score {score}",
+                    finding.category.as_deref().unwrap_or(&finding.rule_id)
+                );
+            }
+        }
+        if !result.coverage.unevaluated_rules.is_empty() {
+            println!(
+                "Unevaluated rules: {} ({})",
+                result.coverage.unevaluated_rules.join(", "),
+                result.reason_codes.join(", ")
+            );
+        }
         let confirmed = if result.action == Action::Warn {
             print!(
-                "This chat message shares an email address. Type send to continue, or edit to replace the draft: "
+                "This chat message matched your policy. Type send to continue, or edit to replace the draft: "
             );
             io::stdout().flush()?;
             let mut decision = String::new();

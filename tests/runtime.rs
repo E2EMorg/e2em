@@ -170,13 +170,13 @@ fn unavailable_detectors_are_reported_and_invalid_scores_review() {
     }
 }
 #[test]
-fn custom_policies_are_accepted_but_blocking_remains_invalid() {
+fn custom_and_contextual_blocking_are_rejected() {
     let mut p = policy();
     let rule = &mut p.rules[0];
     rule.category = None;
     rule.policy_text = Some("a custom rule".into());
     rule.r#match = Match::PolicyText;
-    assert_eq!(validate_policy(&p), Ok(()));
+    assert_eq!(validate_policy(&p), Err(ErrorCode::UnsupportedPolicy));
     p.rules[0].action = Action::Block;
     assert_eq!(validate_policy(&p), Err(ErrorCode::InvalidPolicy));
     let mut p = policy();
@@ -188,7 +188,7 @@ fn custom_policies_are_accepted_but_blocking_remains_invalid() {
 }
 
 #[test]
-fn all_valid_policy_categories_and_custom_text_can_be_reported() {
+fn all_valid_named_policy_categories_can_be_reported() {
     let cases: serde_json::Value =
         serde_json::from_str(include_str!("conformance/policy-reports.json")).unwrap();
     let engine = Engine::default();
@@ -206,7 +206,10 @@ fn all_valid_policy_categories_and_custom_text_can_be_reported() {
             let value = serde_json::to_value(result).unwrap();
             assert_eq!(value["status"], case["expected"]["status"]);
             assert_eq!(value["action"], case["expected"]["action"]);
-            assert_eq!(value["coverage"]["unevaluated_rules"], case["expected"]["unevaluated_rules"]);
+            assert_eq!(
+                value["coverage"]["unevaluated_rules"],
+                case["expected"]["unevaluated_rules"]
+            );
             assert_eq!(value["reason_codes"], case["expected"]["reason_codes"]);
             assert!(value["findings"].as_array().unwrap().is_empty());
         }
@@ -217,73 +220,78 @@ struct ModelStub {
     answer: f64,
 }
 impl PolicyScorer for ModelStub {
-    fn supports_model_policies(&self) -> bool {
+    fn supports_model_categories(&self) -> bool {
         true
     }
     fn model_version(&self) -> String {
         "experimental-test-model".into()
     }
-    fn score(&self, message: &str, context: Option<&str>, policy: &str) -> Result<f64, BackendError> {
+    fn score(
+        &self,
+        message: &str,
+        context: Option<&str>,
+        policy: &str,
+    ) -> Result<f64, BackendError> {
         assert_eq!(message, "🙂 Original chat text");
         assert_eq!(context, Some("Previous chat message"));
-        assert!(matches!(policy, "experimental.category" | "Do not discuss a former partner."));
+        assert_eq!(policy, "experimental.category");
         Ok(self.answer)
-    }
-    fn action_threshold(&self, _: &str) -> Option<f64> {
-        Some(0.7)
     }
 }
 
-fn model_request(custom: bool) -> Request {
+fn model_request() -> Request {
     let mut r = request();
     r.message.text = "🙂 Original chat text".into();
     r.context = vec![Turn {
-        id: "previous".into(), speaker: "peer".into(), text: "Previous chat message".into(),
+        id: "previous".into(),
+        speaker: "peer".into(),
+        text: "Previous chat message".into(),
     }];
     let rule = &mut r.policy.as_mut().unwrap().rules[0];
     rule.context_requirement = ContextRequirement::SuppliedWindow;
     rule.min_context_messages = Some(1);
-    if custom {
-        rule.r#match = Match::PolicyText;
-        rule.category = None;
-        rule.policy_text = Some("Do not discuss a former partner.".into());
-    } else {
-        rule.r#match = Match::Score;
-        rule.category = Some("experimental.category".into());
-        rule.review_threshold = Some(0.4);
-        rule.action_threshold = Some(0.7);
-    }
+    rule.r#match = Match::Score;
+    rule.category = Some("experimental.category".into());
+    rule.review_threshold = Some(0.4);
+    rule.action_threshold = Some(0.7);
     r
 }
 
 #[test]
-fn arbitrary_model_policies_report_every_score_without_a_rating_gate() {
-    for custom in [false, true] {
-        for score in [0.0, 0.2, 0.5, 0.7, 1.0] {
-            let engine = Engine::new(ModelStub { answer: score });
-            let r = model_request(custom);
-            let result = engine.assess("app", &r);
-            assert_eq!(result.status, Status::Assessed);
-            assert_eq!(result.versions.model, "experimental-test-model");
-            assert_eq!(result.findings.len(), 1);
-            assert_eq!(result.findings[0].score, Some(score));
-            assert_eq!(result.findings[0].method, if custom { Method::CustomPolicy } else { Method::Model });
-            assert!(result.findings[0].spans.is_empty());
-            assert_eq!(result.action, if score >= 0.7 { Action::Warn } else if !custom && score >= 0.4 { Action::Review } else { Action::Allow });
-            assert!(result.coverage.unevaluated_rules.is_empty());
-        }
+fn arbitrary_model_categories_report_every_score_without_a_rating_gate() {
+    for score in [0.0, 0.2, 0.5, 0.7, 1.0] {
+        let engine = Engine::new(ModelStub { answer: score });
+        let r = model_request();
+        let result = engine.assess("app", &r);
+        assert_eq!(result.status, Status::Assessed);
+        assert_eq!(result.versions.model, "experimental-test-model");
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(result.findings[0].score, Some(score));
+        assert_eq!(result.findings[0].method, Method::Model);
+        assert!(result.findings[0].spans.is_empty());
+        assert_eq!(
+            result.action,
+            if score >= 0.7 {
+                Action::Warn
+            } else if score >= 0.4 {
+                Action::Review
+            } else {
+                Action::Allow
+            }
+        );
+        assert!(result.coverage.unevaluated_rules.is_empty());
     }
 }
 
 #[test]
 fn invalid_model_outputs_review_and_missing_context_does_not_score() {
     for score in [f64::NAN, f64::INFINITY, -0.1, 2.0] {
-        let result = Engine::new(ModelStub { answer: score }).assess("app", &model_request(false));
+        let result = Engine::new(ModelStub { answer: score }).assess("app", &model_request());
         assert_eq!(result.error_code, Some(ErrorCode::InternalError));
         assert_eq!(result.action, Action::Review);
         assert_eq!(result.coverage.unevaluated_rules, ["email-warning"]);
     }
-    let mut r = model_request(true);
+    let mut r = model_request();
     r.context.clear();
     let result = Engine::new(ModelStub { answer: 0.7 }).assess("app", &r);
     assert_eq!(result.status, Status::Indeterminate);
@@ -291,16 +299,20 @@ fn invalid_model_outputs_review_and_missing_context_does_not_score() {
 }
 
 #[test]
-fn scheduler_forwards_model_support_and_custom_thresholds() {
+fn scheduler_forwards_named_category_support_and_model_identity() {
     let scheduler = Scheduler::with_factory(Duration::from_secs(300), || {
         Ok(Box::new(ModelStub { answer: 0.6 }))
     });
-    let result = scheduler.submit("app", model_request(true)).unwrap().wait().unwrap();
+    let result = scheduler
+        .submit("app", model_request())
+        .unwrap()
+        .wait()
+        .unwrap();
     assert_eq!(result.status, Status::Assessed);
-    assert_eq!(result.action, Action::Allow);
+    assert_eq!(result.action, Action::Review);
     assert_eq!(result.findings[0].score, Some(0.6));
     assert_eq!(scheduler.capabilities().model, "experimental-test-model");
-    assert_eq!(scheduler.capabilities().custom_policies, "supported");
+    assert_eq!(scheduler.capabilities().custom_policies, "none");
 }
 
 #[test]

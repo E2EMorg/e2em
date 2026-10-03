@@ -56,12 +56,7 @@ impl<S: PolicyScorer> Engine<S> {
             languages: vec!["en".into(), "und".into()],
             detectors: vec!["pii.email".into()],
             presets: vec![],
-            custom_policies: if self.scorer.supports_model_policies() {
-                "supported"
-            } else {
-                "report-only"
-            }
-            .into(),
+            custom_policies: "none".into(),
             profiles: vec![Profile::Personal],
             actions: vec![Action::Warn, Action::Review],
             limits: Limits {
@@ -198,18 +193,14 @@ impl<S: PolicyScorer> Engine<S> {
                 result.reason_codes.push("INSUFFICIENT_CONTEXT".into());
                 continue;
             }
-            if rule.r#match != Match::Detected {
-                if !self.scorer.supports_model_policies() {
+            if rule.r#match == Match::Score {
+                if !self.scorer.supports_model_categories() {
                     result.status = Status::Indeterminate;
                     result.coverage.unevaluated_rules.push(rule.id.clone());
                     result.reason_codes.push("MODEL_UNAVAILABLE".into());
                     continue;
                 }
-                let policy_text = match rule.r#match {
-                    Match::Score => rule.category.as_deref().expect("validated category"),
-                    Match::PolicyText => rule.policy_text.as_deref().expect("validated policy text"),
-                    Match::Detected => unreachable!(),
-                };
+                let category = rule.category.as_deref().expect("validated category");
                 let context = (rule.context_requirement == ContextRequirement::SuppliedWindow)
                     .then(|| {
                         request
@@ -219,42 +210,26 @@ impl<S: PolicyScorer> Engine<S> {
                             .collect::<Vec<_>>()
                             .join("\n")
                     });
-                let score = match self.scorer.score(
-                    &request.message.text,
-                    context.as_deref(),
-                    policy_text,
-                ) {
-                    Ok(score) if score.is_finite() && (0.0..=1.0).contains(&score) => score,
-                    _ => {
-                        result
-                            .coverage
-                            .unevaluated_rules
-                            .extend(applicable[index..].iter().map(|r| r.id.clone()));
-                        fail(&mut result, ErrorCode::InternalError);
-                        break;
-                    }
-                };
-                let threshold = match rule.r#match {
-                    Match::Score => rule.action_threshold.expect("validated threshold"),
-                    Match::PolicyText => self.scorer.action_threshold(policy_text).unwrap_or(0.5),
-                    Match::Detected => unreachable!(),
-                };
-                if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
-                    result
-                        .coverage
-                        .unevaluated_rules
-                        .extend(applicable[index..].iter().map(|r| r.id.clone()));
-                    fail(&mut result, ErrorCode::InternalError);
-                    break;
-                }
+                let score =
+                    match self
+                        .scorer
+                        .score(&request.message.text, context.as_deref(), category)
+                    {
+                        Ok(score) if score.is_finite() && (0.0..=1.0).contains(&score) => score,
+                        _ => {
+                            result
+                                .coverage
+                                .unevaluated_rules
+                                .extend(applicable[index..].iter().map(|r| r.id.clone()));
+                            fail(&mut result, ErrorCode::InternalError);
+                            break;
+                        }
+                    };
+                let threshold = rule.action_threshold.expect("validated threshold");
                 result.findings.push(Finding {
                     rule_id: rule.id.clone(),
                     category: rule.category.clone(),
-                    method: if rule.r#match == Match::PolicyText {
-                        Method::CustomPolicy
-                    } else {
-                        Method::Model
-                    },
+                    method: Method::Model,
                     score: Some(score),
                     reason_code: "MODEL_SCORE".into(),
                     spans: vec![],
@@ -376,7 +351,10 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
             || rule.directions.len() > 2
             || (rule.directions.len() == 2 && rule.directions[0] == rule.directions[1])
             || rule.action == Action::Allow
-            || rule.category.as_ref().is_some_and(|category| !identifier(category))
+            || rule
+                .category
+                .as_ref()
+                .is_some_and(|category| !identifier(category))
         {
             return Err(ErrorCode::InvalidPolicy);
         }
@@ -405,6 +383,7 @@ pub fn validate_policy(policy: &Policy) -> Result<(), ErrorCode> {
                 {
                     return Err(ErrorCode::InvalidPolicy);
                 }
+                unsupported = true;
             }
             Match::Score => {
                 let valid = match (rule.review_threshold, rule.action_threshold) {

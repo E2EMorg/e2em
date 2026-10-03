@@ -1,0 +1,32 @@
+{
+  "schema_version": "0.1",
+  "id": "personal-category-trial",
+  "version": "1",
+  "profile": "personal",
+  "rules": [
+    {
+      "id": "threat-score",
+      "category": "abuse.threat",
+      "directions": ["outgoing"],
+      "match": "score",
+      "context_requirement": "target_only",
+      "review_threshold": 0.4,
+      "action_threshold": 0.7,
+      "action": "warn"
+    },
+    {
+      "id": "hate-score",
+      "category": "identity.hate",
+      "directions": ["outgoing"],
+      "match": "score",
+      "context_requirement": "target_only",
+      "review_threshold": 0.4,
+      "action_threshold": 0.7,
+      "action": "warn"
+    }
+  ],
+  "default_action": "allow",
+  "on_indeterminate": "review",
+  "on_error": "review",
+  "override": "user_confirm"
+}

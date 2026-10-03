@@ -2,13 +2,13 @@
 
 [Runtime installation](INSTALL.md) · [Contract](runtime/CONTRACT.md) · [Downloads](https://github.com/E2EMorg/e2em/releases)
 
-Integrate E2EM at your chat app's send boundary: assess a draft, show any warning, and confirm that the draft is still current before sending. Preview 0.1 checks for email addresses shared in chat messages (`pii.email`).
+Integrate E2EM at your chat app's send boundary: assess a draft, show any warning, and confirm that the draft is still current before sending. All named policy categories are accepted for reporting; model evaluation ratings do not gate access. The bundled backend evaluates email-address patterns (`pii.email`). Other categories are reported as unevaluated unless a suitable backend is supplied.
 
 Install and start the runtime, then enrol `my-app` using the [platform setup guide](INSTALL.md). Python and Node SDK packages are downloadable release assets; registry publication is not enabled. The Rust and C SDKs support embedding, which needs no running service or enrolment.
 
 ## Policy and credentials
 
-[`examples/chat-policy.json`](../examples/chat-policy.json) is a complete starting policy for outgoing chat messages. It warns when a draft includes an email address, chooses `review` for errors and indeterminate results, and requires explicit user confirmation for warnings. Copy it into your application or load it from this checkout. The earlier [`email-policy.json`](../examples/email-policy.json) example remains available.
+[`examples/chat-policy.json`](../examples/chat-policy.json) is a minimal example policy for outgoing chat messages, not a required policy. It warns when a draft includes an email address, chooses `review` for errors and indeterminate results, and requires explicit user confirmation for warnings. Copy it into your application or load it from this checkout. The earlier [`email-policy.json`](../examples/email-policy.json) example remains available.
 
 Private credentials created by enrolment contain `socket_path`, `principal`, `secret`, and `provider`:
 
@@ -179,8 +179,26 @@ Linux native C libraries are built for the release's Ubuntu 24.04 runner and can
 
 Spans are half-open UTF-8 byte offsets into original message text. Python `utf16_span` and Node `utf16Span` convert them for UTF-16 UIs and reject offsets inside code points. They do not rewrite text.
 
+## Named category trials
+
+Use [`examples/category-policy.json`](../examples/category-policy.json) to try multiple named categories. Replace its category names with any category you want to report; there is no approved-category list or minimum model evaluation rating. Category identifiers must be nonempty, at most 128 bytes, and contain no control characters.
+
+`match: "score"` uses `review_threshold` and `action_threshold` to interpret each message's score. These are message decision thresholds, not model quality requirements. Reports include every finite score from 0 to 1, including scores below both thresholds. Scores below the review threshold allow, scores from the review threshold up to the action threshold review, and scores at or above the action threshold use the rule's action.
+
+A supplied Rust `PolicyScorer` opts into named category scoring with `supports_model_categories()` and reports its identity through `model_version()`. It receives the original target text, the named category, and supplied context when requested. `Scheduler::with_factory` supports the same adapter. No model, category rating catalogue, or model loader is bundled in this release.
+
+The default backend reports model rules with `MODEL_UNAVAILABLE`, and unimplemented deterministic categories with `DETECTOR_UNAVAILABLE`. Both produce `indeterminate` / `review` and list rule IDs in `coverage.unevaluated_rules`; they are not validation errors. Completed reports remain visible when another rule is unevaluated. Custom policy text and platform enforcement remain unsupported.
+
+```sh
+cargo run --locked --example runtime_chat -- examples/category-policy.json
+python3 sdk/python/examples/send_flow.py /path/to/candidates.json examples/category-policy.json
+node sdk/node/examples/send-flow.js /path/to/candidates.json examples/category-policy.json
+```
+
+The candidate file is your explicitly provisioned provider list. These reference hooks print available scores and unevaluated rules before the local send decision. Use an empty required-detector list for exploration; requiring a detector during discovery still requires that provider to actually implement it.
+
 ## Errors and boundaries
 
 `E2EMError` exposes fixed codes; runtime errors do not include input text. Unavailable providers, timeouts and malformed replies hold the message for review. Cancellation is best effort. A returned result does not itself send or block a message; the application owns that action.
 
-The service separates cooperating enrolled apps, but does not protect their credentials against hostile processes running as the same OS user. Unsupported categories, custom rules and platform profiles fail validation. Read the [contract](runtime/CONTRACT.md) and [security limits](runtime/SECURITY.md) for full bounds and semantics.
+The service separates cooperating enrolled apps, but does not protect their credentials against hostile processes running as the same OS user. Named categories are accepted independently of model ratings. Custom policy text and platform profiles remain unsupported; malformed policies fail validation. Read the [contract](runtime/CONTRACT.md) and [security limits](runtime/SECURITY.md) for full bounds and semantics.

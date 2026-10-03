@@ -30,8 +30,8 @@ def main():
         parser.error('native host required')
     package = args.package.resolve(strict=True)
     upgrade = args.upgrade_package.resolve(strict=True)
-    initial_version = json.loads(Path(str(package) + '.json').read_text())['version']
-    upgrade_version = json.loads(Path(str(upgrade) + '.json').read_text())['version']
+    initial_version = json.loads(Path(str(package) + '.json').read_text(encoding="utf-8"))['version']
+    upgrade_version = json.loads(Path(str(upgrade) + '.json').read_text(encoding="utf-8"))['version']
     if tuple(map(int, upgrade_version.split('.'))) <= tuple(map(int, initial_version.split('.'))):
         parser.error('upgrade fixture must have a newer package version')
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -102,7 +102,7 @@ def main():
             credential = user_config / 'apps/package-check.json'
         before = credential.read_bytes()
         grants = (user_config / 'grants.json').read_bytes()
-        assert json.loads((user_config / 'installation.json').read_text())['packaged_binary'] == str(binary)
+        assert json.loads((user_config / 'installation.json').read_text(encoding="utf-8"))['packaged_binary'] == str(binary)
         install(upgrade, args.output.parent)
         run(binary, '--help')
         assert installed_version() == upgrade_version, 'package version did not advance'

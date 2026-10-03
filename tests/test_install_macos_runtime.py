@@ -37,9 +37,9 @@ class MacInstall(unittest.TestCase):
                 module.main([*prefix, "install", "--binary", str(source)])
             module.main([*prefix, "enrol", "reference"])
             credential = config / "apps/reference.json"
-            first = json.loads(credential.read_text())
+            first = json.loads(credential.read_text(encoding="utf-8"))
             module.main([*prefix, "enrol", "reference"])
-            second = json.loads(credential.read_text())
+            second = json.loads(credential.read_text(encoding="utf-8"))
             self.assertNotEqual(first["secret"], second["secret"])
             self.assertEqual(first["socket_path"], value["ProgramArguments"][2])
             self.assertEqual(credential.stat().st_mode & 0o777, 0o600)
@@ -47,7 +47,7 @@ class MacInstall(unittest.TestCase):
                 module.main([*prefix, "enrol", "../escape"])
             module.main([*prefix, "revoke", "reference"])
             self.assertFalse(credential.exists())
-            self.assertEqual(json.loads((config / "grants.json").read_text())["grants"], [])
+            self.assertEqual(json.loads((config / "grants.json").read_text(encoding="utf-8"))["grants"], [])
             (runtime / "owner-note").write_text("keep")
             (runtime / "runtime.sock").write_text("still present")
             with self.assertRaises(ValueError):
@@ -58,7 +58,7 @@ class MacInstall(unittest.TestCase):
             self.assertFalse(agent.exists())
             self.assertFalse(config.exists())
             self.assertTrue(source.exists())
-            self.assertEqual((runtime / "owner-note").read_text(), "keep")
+            self.assertEqual((runtime / "owner-note").read_text(encoding="utf-8"), "keep")
 
     def test_long_socket_path_is_rejected_before_installing_files(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,7 +1,7 @@
 """Validator for the exact subset emitted by our Rust contract generator."""
 import json
 from pathlib import Path
-SCHEMA = json.loads(Path(__file__).with_name("response.schema.json").read_text())
+SCHEMA = json.loads(Path(__file__).with_name("response.schema.json").read_text(encoding="utf-8"))
 def valid(value, schema=SCHEMA, root=SCHEMA):
     if "$ref" in schema: return valid(value, root["$defs"][schema["$ref"].rsplit("/",1)[1]], root)
     for key in ("anyOf", "oneOf"):

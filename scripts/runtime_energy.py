@@ -12,9 +12,9 @@ def read_domains(root=ROOT):
     domains = {}
     for energy in sorted(root.glob("**/energy_uj")):
         folder = energy.parent
-        domains[folder.name] = {"name": (folder / "name").read_text().strip(),
-                               "energy_uj": int(energy.read_text()),
-                               "max_energy_range_uj": int((folder / "max_energy_range_uj").read_text())}
+        domains[folder.name] = {"name": (folder / "name").read_text(encoding="utf-8").strip(),
+                               "energy_uj": int(energy.read_text(encoding="utf-8")),
+                               "max_energy_range_uj": int((folder / "max_energy_range_uj").read_text(encoding="utf-8"))}
     if not domains:
         raise OSError("no RAPL energy domains found")
     return domains

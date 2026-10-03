@@ -31,17 +31,28 @@ call ID so concurrent operations can complete out of order.
 
 ## Preview capability profile
 
-The first integration focus is chat drafts and their send boundary. The initial
+The first integration focus is chat drafts and their send boundary. All named
+categories are accepted for reporting, independently of model ratings. The bundled
 check detects email addresses shared in chat messages; the host owns the warning
 and confirmation flow.
 
-Only `pii.email`, the personal profile and warn/review actions are enabled.
-No contextual preset, custom rule, platform enforcement, model package or token
-classifier is advertised. `model=none`, `tokenizer=none`, `max_tokens=null` and
-empty presets accurately describe this slice. Unsupported rules fail validation
-before any scorer call. Contextual and custom block requests are invalid even
-when another unsupported rule precedes them. A deterministic block is unsupported
-in this warning preview. No qualification is implied for Gandalf.
+Named categories support `detected` and `score` rules without a category allowlist
+or model evaluation rating gate. Category identifiers are nonempty, at most 128
+bytes, and have no control characters. Only the personal profile and warn/review
+authority are enabled. Custom policy text and platform enforcement are unsupported.
+The bundled backend implements `pii.email`; no model package or token classifier
+is shipped. `model=none`, `tokenizer=none`, `max_tokens=null` and
+empty presets accurately describe the bundled backend. They describe available
+execution rather than restricting category submission. Unavailable deterministic
+checks report `DETECTOR_UNAVAILABLE`; unavailable model checks report
+`MODEL_UNAVAILABLE`. Both produce indeterminate/review and enumerate unevaluated
+rule IDs. A supplied embedded model scorer can opt into all named categories and
+report its model version. Every finite probability from 0 to 1 is returned as a
+model finding, including scores below decision thresholds. Thresholds choose
+message actions, not category eligibility. Contextual and custom block requests
+are invalid even when an unavailable category precedes them. A deterministic
+block is unsupported in this warning preview. Model evaluation ratings are
+advisory; no model quality rating is claimed here.
 
 English (`en`) and language-neutral deterministic coverage (`und`) are exposed.
 `auto` yields `und`; it does not claim language identification. An unsupported
@@ -49,8 +60,9 @@ explicit hint yields indeterminate/review. The full target is scanned, with no
 prefix truncation or token limit. Width/compatibility normalisation maps each
 output byte to its whole original code point. This mapping is appropriate to the
 ASCII email detector; it is not a general tokenizer or linguistic normalizer.
-Findings use null scores and half-open original UTF-8 byte spans, never matched
-text. UTF-16 conversion helpers reject offsets inside a code point, including
+Deterministic findings use null scores and half-open original UTF-8 byte spans,
+never matched text. Model findings include numeric scores and no spans. UTF-16
+conversion helpers reject offsets inside a code point, including
 emoji and BOM cases. This detector identifies email patterns, not verified
 addresses or all possible email obfuscations.
 
@@ -85,7 +97,8 @@ keep confirmation specific to that snapshot. The Rust guard and SDK examples do
 this. The application owns encryption/send/display and accessible warnings.
 Installing this provider cannot compel an application to participate or obey.
 `cargo run --locked --example runtime_chat` is an offline reference chat; it
-requires explicit continuation when a chat message shares an email address and holds failures.
+accepts an optional policy JSON path, prints model scores and unevaluated rules,
+requires explicit continuation for warnings, and holds incomplete assessments.
 
 ## Compatibility and acceptance mapping
 
@@ -93,18 +106,18 @@ requires explicit continuation when a chat message shares an email address and h
 require an explicit negotiated schema revision before providers emit them.
 Changing enum meanings, required fields, reference scope or ABI ownership is a
 breaking revision. Clients reject incompatible API/ABI versions and malformed
-responses. Separate API 0.1 from C ABI integer 1 and runtime package 0.1.0.
+responses. Separate API 0.1 from C ABI integer 1 and runtime package 0.1.1.
 
 | Specification scenario | Evidence |
 | --- | --- |
 | Ordinary text, email [12,29), emoji, whitespace, full-width text, injection | `tests/conformance/assessments.json`, Rust/C/Python/Node parity |
 | Missing context, exact bytes, stale revisions/context/policy | `tests/runtime.rs`, live SDK snapshot tests |
-| Unsupported preset/custom; custom block; policy immutability/authority | `tests/conformance/policy-failures.json`, principal/reference tests |
+| All named categories; unavailable checks; custom rejection; policy immutability/authority | `tests/conformance/policy-reports.json`, `tests/conformance/policy-failures.json`, model scorer and principal/reference tests |
 | Deadline, memory pressure, load failure, overload, cancellation/restart | gated scheduler tests, live service tests |
 | Malformed response/frame, wrong UID/secret/provider, revoked grant | SDK/schema and service black-box tests |
 | Network/retention | Unix-only adapter; live tests inspect output and runtime files; no telemetry/download code |
 | Tampered/downgraded models | No model loader/package is enabled. Production verification is issue #34 and remains a gate. |
 
 This slice does not satisfy later signed-package, contextual-model or physical-
-phone acceptance gates. It rejects unsupported capabilities rather than claiming
-them through the contract.
+phone acceptance gates. It reports unavailable category checks as unevaluated
+and rejects unsupported authority and custom policy text.

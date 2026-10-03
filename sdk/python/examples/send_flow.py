@@ -7,9 +7,9 @@ import sys
 from e2em import Client, E2EMError
 
 async def main():
-    candidates=json.loads(Path(sys.argv[1]).read_text())
-    policy=json.loads(Path(sys.argv[2]).read_text())
-    client=await Client.discover(candidates,["pii.email"])
+    candidates=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    policy=json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+    client=await Client.discover(candidates,[])
     async with client:
         reference=await client.validate_policy(policy)
         current={"api_version":"0.1","request_id":"draft-1","direction":"outgoing","message":{"id":"draft","revision":"1","speaker":"self","text":input("Chat message: ")},"policy_ref":reference}
@@ -18,12 +18,18 @@ async def main():
         except E2EMError as error:
             print(f"Message held: {error.code}. Edit or retry.")
             return
+        for finding in result.value["findings"]:
+            if finding["score"] is not None:
+                print(f"Category {finding['category']}: score {finding['score']}")
+        if result.value["coverage"]["unevaluated_rules"]:
+            print("Unevaluated rules:", ", ".join(result.value["coverage"]["unevaluated_rules"]),
+                  "(" + ", ".join(result.value["reason_codes"]) + ")")
         # The real host increments revision and changes current when an edit occurs.
         if not result.applies_to(current):
             print("Draft changed; assess its new revision.");return
         permitted=result.action == "allow"
         if result.action == "warn" and policy["override"] == "user_confirm":
-            permitted=input("This chat message shares an email address. Type send to continue: ") == "send"
+            permitted=input("This chat message matched your policy. Type send to continue: ") == "send"
         if permitted and result.applies_to(current):
             print("Message accepted by the local reference chat.")
         else: print("Message held. Edit or retry.")

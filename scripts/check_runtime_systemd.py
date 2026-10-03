@@ -23,7 +23,7 @@ async def main():
                 if runtime.exists():break
                 await asyncio.sleep(.01)
             async with await Client.open(str(runtime),"reference","c"*64,"systemd-fixture") as client:
-                request=json.loads((ROOT/"tests/conformance/assessments.json").read_text())[0]["request"]
+                request=json.loads((ROOT/"tests/conformance/assessments.json").read_text(encoding="utf-8"))[0]["request"]
                 assert (await client.assess(request)).action == "warn"
                 await asyncio.sleep(1.1)
                 assert (await client.capabilities())["runtime_state"] == "unloaded"

@@ -22,8 +22,8 @@ def main():
             result=subprocess.run(["wine",str(binary),"Z:"+str(path).replace("/","\\")],cwd=temporary,env=env,capture_output=True,text=True,timeout=60)
             if result.returncode:raise RuntimeError(f"Wine foreign client failed ({result.returncode}): {result.stderr}")
             return json.loads(result.stdout)
-        assessments=json.loads((ROOT/"tests/conformance/assessments.json").read_text())
-        policies=json.loads((ROOT/"tests/conformance/policy-failures.json").read_text())
+        assessments=json.loads((ROOT/"tests/conformance/assessments.json").read_text(encoding="utf-8"))
+        policies=json.loads((ROOT/"tests/conformance/policy-failures.json").read_text(encoding="utf-8"))
         for case in assessments:
             result=invoke(dict(op="assess",request=case["request"]))["assessment"]
             assert result["status"] == case["expected"]["status"]

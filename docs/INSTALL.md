@@ -14,7 +14,7 @@ Choose your platform under **Assets** on the newest preview release. Files start
 
 The release is an unsigned developer preview. macOS/Windows can warn about an unverified publisher; signed/notarized installers are a future release milestone. Only open an installer you obtained from this repository's release page. Check its SHA-256 against `SHA256SUMS` if needed. Checksums verify bytes, not publisher identity.
 
-Setup has three steps: **install the package**, **set up the runtime for your user**, and **enrol an app**. Installing the runtime alone does not change other applications. The first focus is chat apps that assess drafts before sending; the preview warns about email addresses shared in chat messages. Application credentials stay private on your computer.
+Setup has three steps: **install the package**, **set up the runtime for your user**, and **enrol an app**. Installing the runtime alone does not change other applications. The first focus is chat apps that assess drafts before sending; the preview accepts all named policy categories for reporting, evaluates email-address patterns with its bundled detector, and reports unavailable checks as unevaluated. Application credentials stay private on your computer.
 
 ## Windows
 
@@ -82,7 +82,7 @@ The app credential file is `~/.config/e2em/apps/my-app.json`. The runtime proces
 
 `my-app` is the application principal used by the [SDK examples](SDK.md). Enrol another slug for each app; re-enrolling rotates its secret. SDKs read the resulting credential file from your computer. They do not obtain credentials from web pages.
 
-See [Python](../sdk/python/README.md), [Node / TypeScript](../sdk/node/README.md), or [embedded C/C++](../crates/e2em-ffi/README.md). Start with the [chat integration guide](SDK.md) and its [chat policy](../examples/chat-policy.json). The native service currently supports personal `pii.email` warning/review policies; unsupported policies fail validation.
+See [Python](../sdk/python/README.md), [Node / TypeScript](../sdk/node/README.md), or [embedded C/C++](../crates/e2em-ffi/README.md). Start with the [chat integration guide](SDK.md) and its [chat policy](../examples/chat-policy.json). The native service accepts named categories in personal warning/review policies. Its bundled backend evaluates `pii.email`; other checks return an indeterminate report with unevaluated rule IDs. Custom policy text and platform authority remain unsupported.
 
 ## Upgrade or remove
 
@@ -101,6 +101,7 @@ For exact removal commands, macOS PKG receipt handling, source installations, an
 | `MODEL_UNAVAILABLE` | Check the runtime is running, the app is enrolled, and its credentials match this provider. The error code also covers unavailable rules-only providers. |
 | Policy reference stops working after restart | Reconnect and validate the policy again; references belong to one provider instance. |
 | App cannot access the endpoint from a sandbox | Shared access is not promised for sandboxed apps; use an embedded integration where permitted. |
-| Unsupported rule or profile | Read `capabilities()`; preview 0.1 supports personal `pii.email` warnings/review only. |
+| Unevaluated category | The category was accepted, but its detector or model is unavailable. Check `coverage.unevaluated_rules` and reason codes. |
+| Unsupported rule or profile | Custom policy text and platform authority remain unsupported. Read `capabilities()` and check policy structure. |
 
 When reporting a problem, include your OS, release version, command, and fixed error code. Omit credentials and message contents.

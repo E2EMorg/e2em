@@ -18,7 +18,7 @@ from runtime_energy import EnergyReader, energy_delta
 def counters(pid, proc_root=Path("/proc")):
     directory = proc_root / str(pid)
     values = {}
-    for line in (directory / "status").read_text().splitlines():
+    for line in (directory / "status").read_text(encoding="utf-8").splitlines():
         key, _, value = line.partition(":")
         if key == "VmRSS":
             values[key] = int(value.split()[0])
@@ -26,8 +26,8 @@ def counters(pid, proc_root=Path("/proc")):
     threads = 0
     for task in (directory / "task").iterdir():
         try:
-            status = (task / "status").read_text()
-            slices = int((task / "schedstat").read_text().split()[2])
+            status = (task / "status").read_text(encoding="utf-8")
+            slices = int((task / "schedstat").read_text(encoding="utf-8").split()[2])
         except FileNotFoundError:
             continue
         threads += 1
@@ -36,7 +36,7 @@ def counters(pid, proc_root=Path("/proc")):
             if key in ("voluntary_ctxt_switches", "nonvoluntary_ctxt_switches"):
                 values[key] += int(value.strip())
         values["scheduled_timeslices"] += slices
-    fields = (directory / "stat").read_text().rpartition(")")[2].split()
+    fields = (directory / "stat").read_text(encoding="utf-8").rpartition(")")[2].split()
     values["cpu_seconds"] = (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
     values["threads"] = threads
     return values
@@ -70,9 +70,9 @@ async def measure(args, energy=None):
             else:
                 raise RuntimeError("measurement service did not become authenticated and ready")
             async with client:
-                policy=json.loads((ROOT/"tests/conformance/email-policy.json").read_text())
+                policy=json.loads((ROOT/"tests/conformance/email-policy.json").read_text(encoding="utf-8"))
                 reference=await client.validate_policy(policy)
-                request=json.loads((ROOT/"tests/conformance/assessments.json").read_text())[0]["request"]
+                request=json.loads((ROOT/"tests/conformance/assessments.json").read_text(encoding="utf-8"))[0]["request"]
                 request.pop("policy");request["policy_ref"]=reference
                 unloaded=counters(process.pid)
                 cold=[];warm=[];cycles=[]

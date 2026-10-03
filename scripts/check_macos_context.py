@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def request_header(directory):
-    fixture = json.loads((ROOT / "tests/conformance/assessments.json").read_text())[0]
+    fixture = json.loads((ROOT / "tests/conformance/assessments.json").read_text(encoding="utf-8"))[0]
     call = {"call_id": "context-probe", "api_version": "0.1", "operation": {"op": "assess", "request": fixture["request"]}}
     literal = json.dumps(json.dumps(call, ensure_ascii=True))
     path = directory / "e2em_probe_request.h"

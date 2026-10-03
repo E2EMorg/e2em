@@ -69,7 +69,7 @@ def main(argv=None):
         return
     private_dir(config)
     private_dir(runtime)
-    marker = json.loads((config / "installation.json").read_text())
+    marker = json.loads((config / "installation.json").read_text(encoding="utf-8"))
     base = {"version": 1, "platform": "macos"}
     packaged_marker = (
         isinstance(marker, dict) and set(marker) == {*base, "packaged_binary"}
@@ -104,7 +104,7 @@ def main(argv=None):
     if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", args.principal):
         raise ValueError("principal must be a simple application slug")
     grants_path = config / "grants.json"
-    grants = json.loads(grants_path.read_text())
+    grants = json.loads(grants_path.read_text(encoding="utf-8"))
     grants["grants"] = [g for g in grants["grants"] if g["principal"] != args.principal]
     credential = config / "apps" / (args.principal + ".json")
     if args.command == "revoke":

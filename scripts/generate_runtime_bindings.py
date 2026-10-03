@@ -27,7 +27,7 @@ def typ(schema, language):
 def main():
     definitions = {}
     for path in sorted(SCHEMAS.glob("*.json")):
-        schema = json.loads(path.read_text()); definitions.update(schema.get("$defs",{})); definitions[schema["title"]] = schema
+        schema = json.loads(path.read_text(encoding="utf-8")); definitions.update(schema.get("$defs",{})); definitions[schema["title"]] = schema
     for name,schema in list(definitions.items()):
         if "oneOf" in schema:
             variants=[]
@@ -49,7 +49,7 @@ def main():
     # Union aliases must follow the TypedDict classes they reference.
     py = py[:3] + [line for line in py[3:] if "TypedDict(" in line] + [line for line in py[3:] if "TypedDict(" not in line]
     (ROOT / "sdk/python/e2em/types.py").write_text("\n".join(py)+"\n")
-    response = (SCHEMAS / "response.json").read_text()
+    response = (SCHEMAS / "response.json").read_text(encoding="utf-8")
     (ROOT / "sdk/node/response.schema.json").write_text(response)
     (ROOT / "sdk/python/e2em/response.schema.json").write_text(response)
 if __name__ == "__main__": main()

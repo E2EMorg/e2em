@@ -13,9 +13,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT / "sdk/python"))
 from e2em import Client, E2EMError, utf16_span, _assessment
-CASES = json.loads((ROOT / "tests/conformance/assessments.json").read_text())
-POLICY_FAILURES = json.loads((ROOT / "tests/conformance/policy-failures.json").read_text())
-POLICY = json.loads((ROOT / "tests/conformance/email-policy.json").read_text())
+CASES = json.loads((ROOT / "tests/conformance/assessments.json").read_text(encoding="utf-8"))
+POLICY_FAILURES = json.loads((ROOT / "tests/conformance/policy-failures.json").read_text(encoding="utf-8"))
+POLICY_REPORTS = json.loads((ROOT / "tests/conformance/policy-reports.json").read_text(encoding="utf-8"))
+POLICY = json.loads((ROOT / "tests/conformance/email-policy.json").read_text(encoding="utf-8"))
 
 class Values(unittest.TestCase):
     def test_utf16_offsets_and_codepoint_boundaries(self):
@@ -98,6 +99,19 @@ class Service(unittest.IsolatedAsyncioTestCase):
         for case in POLICY_FAILURES:
             with self.assertRaises(E2EMError) as error: await client.validate_policy(case["policy"])
             self.assertEqual(error.exception.code,case["error_code"])
+    async def test_all_named_categories_produce_reports(self):
+        client = await self.connect()
+        for case in POLICY_REPORTS:
+            policy = copy.deepcopy(case["policy"]); policy["id"] = case["name"]
+            reference = await client.validate_policy(policy)
+            request = copy.deepcopy(CASES[0]["request"])
+            request.pop("policy"); request["policy_ref"] = reference
+            result = await client.assess(request)
+            self.assertEqual(result.status, case["expected"]["status"])
+            self.assertEqual(result.action, case["expected"]["action"])
+            self.assertEqual(result.value["coverage"]["unevaluated_rules"], case["expected"]["unevaluated_rules"])
+            self.assertEqual(result.value["reason_codes"], case["expected"]["reason_codes"])
+            self.assertEqual(result.value["findings"], [])
     async def test_windows_pipe_adapter_preserves_provider_authentication(self):
         # Exercise the Windows client branch on the Unix fixture transport; this
         # validates adapter framing/authentication, not Windows ACLs or IOCP.
@@ -120,16 +134,19 @@ class Service(unittest.IsolatedAsyncioTestCase):
     async def test_wrong_peer_uid_cannot_enrol(self):
         self.grants["grants"][0]["uid"] += 1; self.write_grants()
         with self.assertRaises((OSError,asyncio.IncompleteReadError,E2EMError)): await self.connect()
-    async def test_isolation_unsupported_policy_and_revocation(self):
+    async def test_isolation_named_category_reporting_and_revocation(self):
         a = await self.connect(); b = await self.connect("node")
         ref = await a.validate_policy(POLICY)
         request = copy.deepcopy(CASES[0]["request"]); request.pop("policy"); request["policy_ref"] = ref
         self.assertEqual((await a.assess(request)).action,"warn")
         with self.assertRaises(E2EMError) as error: await b.assess(request)
         self.assertEqual(error.exception.code,"POLICY_NOT_FOUND")
-        unsupported = copy.deepcopy(POLICY); unsupported["rules"][0]["category"] = "abuse.threat"
-        with self.assertRaises(E2EMError) as error: await a.validate_policy(unsupported)
-        self.assertEqual(error.exception.code,"UNSUPPORTED_POLICY")
+        experimental = copy.deepcopy(POLICY); experimental["id"] = "experimental"
+        experimental["rules"][0]["category"] = "abuse.threat"
+        request["policy_ref"] = await a.validate_policy(experimental)
+        report = await a.assess(request)
+        self.assertEqual(report.status, "indeterminate")
+        self.assertEqual(report.value["coverage"]["unevaluated_rules"], ["email-warning"])
         self.assertFalse(await b.cancel("another-principal-request"))
         self.grants["grants"] = [self.grants["grants"][1]]; self.write_grants()
         with self.assertRaises(E2EMError): await a.capabilities()

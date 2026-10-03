@@ -73,9 +73,11 @@ impl LoadedBackend {
 }
 struct SharedScorer(Arc<LoadedBackend>);
 impl crate::PolicyScorer for SharedScorer {
-    fn supports_model_policies(&self) -> bool {
+    fn supports_model_categories(&self) -> bool {
         self.0.scorer.lock().is_ok_and(|scorer| {
-            scorer.as_ref().is_some_and(|scorer| scorer.supports_model_policies())
+            scorer
+                .as_ref()
+                .is_some_and(|scorer| scorer.supports_model_categories())
         })
     }
     fn model_version(&self) -> String {
@@ -85,13 +87,6 @@ impl crate::PolicyScorer for SharedScorer {
             .ok()
             .and_then(|scorer| scorer.as_ref().map(|scorer| scorer.model_version()))
             .unwrap_or_else(|| "none".into())
-    }
-    fn action_threshold(&self, policy: &str) -> Option<f64> {
-        self.0
-            .scorer
-            .lock()
-            .ok()
-            .and_then(|scorer| scorer.as_ref().and_then(|scorer| scorer.action_threshold(policy)))
     }
     fn score(
         &self,
@@ -168,7 +163,7 @@ impl Scheduler {
         Self::with_factory(idle, || Ok(Box::new(crate::RulesScorer::new())))
     }
     /// Factories must be local, bounded and data-only. Model backends opt into
-    /// arbitrary policy scoring; policy evaluation ratings do not gate access.
+    /// arbitrary named category scoring; evaluation ratings do not gate access.
     pub fn with_factory(
         idle: Duration,
         factory: impl Fn() -> Result<Backend, crate::BackendError> + Send + Sync + 'static,

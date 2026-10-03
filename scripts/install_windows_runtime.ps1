@@ -20,6 +20,28 @@ $Executable = Join-Path $Root 'e2emd.exe'
 $GrantsPath = Join-Path $Root 'grants.json'
 $Marker = Join-Path $Root 'installation.json'
 
+# Process paths use long names, while Python temporary paths can contain 8.3
+# aliases. Compare their canonical spelling before removing any private state.
+if (-not ('E2EMSetupPaths' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class E2EMSetupPaths {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetLongPathName(string path, StringBuilder output, uint length);
+    public static string Canonical(string path) {
+        var output = new StringBuilder(32768);
+        uint length = GetLongPathName(path, output, (uint)output.Capacity);
+        if (length == 0 || length >= output.Capacity)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        return output.ToString();
+    }
+}
+'@
+}
+
 function Protect-Path([string]$Path, [bool]$Directory) {
     if ($Directory) {
         $Acl = New-Object System.Security.AccessControl.DirectorySecurity
@@ -100,7 +122,12 @@ if ($Packaged) {
 if ($Action -eq 'uninstall') {
     # Never remove a running process's grant registry. Stop the foreground service
     # with Ctrl+C first. Inspect exact executable paths, not just process names.
-    if (Get-Process -Name e2emd -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Executable }) { throw 'Stop the installed runtime before uninstalling' }
+    if (Test-Path -LiteralPath $Executable) {
+        $ManagedExecutable = [E2EMSetupPaths]::Canonical($Executable)
+        if (Get-Process -Name e2emd -ErrorAction SilentlyContinue | Where-Object {
+            $_.Path -and [E2EMSetupPaths]::Canonical($_.Path) -eq $ManagedExecutable
+        }) { throw 'Stop the installed runtime before uninstalling' }
+    }
     foreach ($File in @(Get-ChildItem -LiteralPath $Root -Filter 'app-*.json')) { Remove-Item -LiteralPath $File.FullName }
     $Managed = @($GrantsPath, $Marker)
     if (-not $Packaged) { $Managed += $Executable }

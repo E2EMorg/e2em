@@ -1,8 +1,8 @@
 <p align="center"><img src="assets/banner.svg" alt="E2EM — private chat message assessment. One runtime. SDKs for your chat app." width="100%"></p>
 
 <p align="center">
-  <a href="#try-the-reference-chat"><strong>Try the reference chat</strong></a> ·
   <a href="https://github.com/E2EMorg/e2em/releases"><strong>⬇ Download the runtime</strong></a> ·
+  <a href="#try-the-reference-chat">Try the reference chat</a> ·
   <a href="docs/INSTALL.md"><strong>Installation guide</strong></a> ·
   <a href="docs/SDK.md">SDK quick start</a> ·
   <a href="https://e2em.org">The E2EM standard</a>
@@ -13,24 +13,6 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5bbfb2" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/API-0.1-8b72d8" alt="API 0.1">
 </p>
-
-### What is E2EM?
-
-E2EM is a local assessment interface for **chat and chat messages**. A chat app supplies a policy and a message before sending; the runtime returns a typed result so the app can send it, show a warning, or hold the draft for review. The original text stays intact, and the app controls what happens next.
-
-The first focus is the chat composer and its send flow: assess the current draft, show any warning, and check that the draft is still current before sending. In preview 0.1, the available check warns when a user shares an email address in a chat message. Broader contextual assessment is planned.
-
-This repository contains the **runtime, SDKs, installers, and integration contract**. The [standard and project overview](https://e2em.org) explain the wider effort. Model training, research datasets, and experimental moderation frontends live outside this repository.
-
-### Try the reference chat
-
-From a source checkout with Rust 1.95+:
-
-```sh
-cargo run --locked --example runtime_chat
-```
-
-Enter a chat message such as `See you at 6!`, then try `You can reach me at alex@example.test`. The second draft triggers a warning before you choose whether to continue. This offline chat accepts messages locally and does not send real messages or require a running daemon. Its [chat policy](examples/chat-policy.json) is also the starting point for SDK integrations.
 
 ### Install E2EM
 
@@ -44,7 +26,27 @@ Enter a chat message such as `See you at 6!`, then try `You can reach me at alex
 | Linux · Ubuntu / Debian, 64-bit | `x86_64-unknown-linux-musl.deb` | [Debian / Ubuntu setup](docs/INSTALL.md#linux) |
 | Linux · Fedora / RPM, 64-bit | `x86_64-unknown-linux-musl.rpm` | [Fedora setup](docs/INSTALL.md#linux) |
 
-> **Developer preview:** chat message assessment currently supports personal warnings for email-address patterns (`pii.email`). Installers are unsigned; Windows/macOS may require explicit permission to open them. Application enrolment and startup are separate setup steps. E2EM works inside apps that integrate it; installing the runtime alone does not add protection to other apps. Native platform test results accompany each release. This is an implementation preview of a developing standard.
+> **Developer preview:** all named categories are accepted for reporting; the bundled runtime evaluates email-address patterns (`pii.email`) and reports other checks as unevaluated. No contextual model is bundled. Installers are unsigned; Windows/macOS may require explicit permission to open them. Application enrolment and startup are separate setup steps. E2EM works inside apps that integrate it; installing the runtime alone does not add protection to other apps. Native platform test results accompany each release. This is an implementation preview of a developing standard.
+
+
+### What is E2EM?
+
+E2EM is a local assessment interface for **chat and chat messages**. A chat app supplies a policy and a message before sending; the runtime returns a typed result so the app can send it, show a warning, or hold the draft for review. The original text stays intact, and the app controls what happens next.
+
+The first focus is the chat composer and its send flow: assess the current draft, show any warning, and check that the draft is still current before sending. All named policy categories can be submitted for reporting, including categories with weak or unknown model ratings. Ratings describe quality and do not decide which categories people may try. The bundled preview evaluates email-address patterns; a supplied model backend can score other named categories.
+
+This repository contains the **runtime, SDKs, installers, and integration contract**. The [standard and project overview](https://e2em.org) explain the wider effort. Model training, research datasets, and experimental moderation frontends live outside this repository.
+
+### Try the reference chat
+
+From a source checkout with Rust 1.95+:
+
+```sh
+cargo run --locked --example runtime_chat
+```
+
+Enter a chat message such as `See you at 6!`, then try `You can reach me at alex@example.test`. The second draft triggers a warning before you choose whether to continue. This offline chat accepts messages locally and does not send real messages or require a running daemon. Its [chat policy](examples/chat-policy.json) is a small example, not a required policy. Try other named categories with `cargo run --locked --example runtime_chat -- examples/category-policy.json`. Without a model backend, these categories are reported as unevaluated and the draft is held for review.
+
 
 ---
 
@@ -144,19 +146,20 @@ flowchart TD
     E -->|review or error| I
 ```
 
-The app must recheck the current snapshot at the actual send boundary, including after warning confirmation. A timeout, unavailable runtime, cancellation, malformed response, or incomplete coverage must hold the action for review. The current preview does not support block policies; unsupported capabilities fail policy validation.
+The app must recheck the current snapshot at the actual send boundary, including after warning confirmation. A timeout, unavailable runtime, cancellation, malformed response, or incomplete coverage must hold the action for review. Named categories are not rejected because of model ratings or an allowlist. Unavailable checks are reported as unevaluated; the current preview does not support block policies or platform authority.
 
 ### Current capabilities
 
 | Available in 0.1 | Outside this preview |
 | :--- | :--- |
-| `pii.email` pattern detection in chat messages | Contextual model categories and custom policies |
+| All named categories accepted for reporting | Custom policy text |
+| `pii.email` detection; model scores with a supplied embedded backend | Bundled contextual model and per-category evaluation ratings |
 | Personal `warn` / `review` policies | Platform enforcement and block policies |
 | Preserved original text and optional UTF-8 spans | Message rewriting |
 | Authenticated desktop IPC, cancellation, revision checks | Browser extension transport and sandbox brokers |
 | Rust core and C ABI; Python and Node clients | OS-supplied providers or automatic provider discovery |
 
-`capabilities()` is authoritative for the running provider. This preview reports `model=none` and `tokenizer=none`; it does not claim model qualification. Account authentication and enrolment separate cooperating apps; they do not isolate secrets from a hostile process running as the same OS user. Read the [security boundaries](docs/runtime/SECURITY.md) before embedding or deploying.
+`capabilities()` is authoritative for the running provider. The bundled backend reports `model=none` and `tokenizer=none`; it does not claim model qualification. Account authentication and enrolment separate cooperating apps; they do not isolate secrets from a hostile process running as the same OS user. Read the [security boundaries](docs/runtime/SECURITY.md) before embedding or deploying.
 
 ### Build and contribute
 

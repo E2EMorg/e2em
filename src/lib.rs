@@ -7,9 +7,9 @@ pub use rules::RulesScorer;
 
 /// Interface for a trusted, bounded policy scorer.
 pub trait PolicyScorer {
-    /// Whether this backend can score arbitrary categories and custom policy text.
+    /// Whether this backend can score arbitrary named policy categories.
     /// This describes execution support, not a policy's evaluation rating.
-    fn supports_model_policies(&self) -> bool {
+    fn supports_model_categories(&self) -> bool {
         false
     }
 

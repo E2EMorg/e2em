@@ -14,4 +14,4 @@ npm install ./e2em-local-0.1.1.tgz
 
 The `./browser` entry point defines an explicit bridge interface; it does not provide Node IPC or a browser extension transport.
 
-Start with the [chat policy](https://github.com/E2EMorg/e2em/blob/main/examples/chat-policy.json). Preview 0.1 supports personal warnings for email addresses shared in chat messages (`pii.email`). Packages are distributed through [GitHub Releases](https://github.com/E2EMorg/e2em/releases); npm registry publication is not enabled. Licensed under [MIT](LICENSE).
+Start with the [chat policy](https://github.com/E2EMorg/e2em/blob/main/examples/chat-policy.json). All named categories are accepted for reporting without a model rating gate. The bundled backend evaluates email addresses (`pii.email`); unavailable checks appear as unevaluated in an indeterminate report. Custom policy text remains unsupported. Packages are distributed through [GitHub Releases](https://github.com/E2EMorg/e2em/releases); npm registry publication is not enabled. Licensed under [MIT](LICENSE).

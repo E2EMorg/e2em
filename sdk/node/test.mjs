@@ -6,6 +6,7 @@ import net from 'node:net';
 import {EventEmitter} from 'node:events';
 const cases = JSON.parse(await fs.readFile(new URL('../../tests/conformance/assessments.json',import.meta.url),'utf8'));
 const policyFailures = JSON.parse(await fs.readFile(new URL('../../tests/conformance/policy-failures.json',import.meta.url),'utf8'));
+const policyReports = JSON.parse(await fs.readFile(new URL('../../tests/conformance/policy-reports.json',import.meta.url),'utf8'));
 const policy = JSON.parse(await fs.readFile(new URL('../../tests/conformance/email-policy.json',import.meta.url),'utf8'));
 test('Unicode bytes convert to UTF16 without splitting characters',()=>{
  assert.deepEqual(utf16Span('🙂 alex@example.test',5,22),[3,20]);
@@ -58,8 +59,17 @@ if (process.argv.includes('--live')) {
    for (const fixture of policyFailures) await assert.rejects(client.validatePolicy(fixture.policy),error=>error.code === fixture.error_code);
    const ref = await client.validatePolicy(policy); const request = structuredClone(cases[0].request); delete request.policy; request.policy_ref = ref;
    assert.equal((await client.assess(request)).action,'warn');
-   const bad = structuredClone(policy); bad.rules[0].category = 'unsupported';
-   await assert.rejects(client.validatePolicy(bad),error=>error.code === 'UNSUPPORTED_POLICY');
+   for (const fixture of policyReports) {
+    const experimental = structuredClone(fixture.policy); experimental.id = fixture.name;
+    const policy_ref = await client.validatePolicy(experimental);
+    const draft = structuredClone(cases[0].request); delete draft.policy; draft.policy_ref = policy_ref;
+    const result = await client.assess(draft);
+    assert.equal(result.status, fixture.expected.status);
+    assert.equal(result.action, fixture.expected.action);
+    assert.deepEqual(result.coverage.unevaluated_rules, fixture.expected.unevaluated_rules);
+    assert.deepEqual(result.reason_codes, fixture.expected.reason_codes);
+    assert.deepEqual(result.findings, []);
+   }
    assert.equal(await client.cancel('missing'),false);
    const controller = new AbortController(); controller.abort();
    await assert.rejects(client.assess(request,{signal:controller.signal}),error=>error.code === 'CANCELLED');

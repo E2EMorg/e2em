@@ -37,11 +37,11 @@ class WindowsSetupTest(unittest.TestCase):
             manage("-Action", "install", "-Binary", str(binary))
             try:
                 manage("-Action", "enrol", "-Principal", "fixture")
-                first = json.loads((install / "app-fixture.json").read_text())
+                first = json.loads((install / "app-fixture.json").read_text(encoding="utf-8"))
                 manage("-Action", "enrol", "-Principal", "fixture")
-                second = json.loads((install / "app-fixture.json").read_text())
+                second = json.loads((install / "app-fixture.json").read_text(encoding="utf-8"))
                 self.assertNotEqual(first["secret"], second["secret"])
-                registry = json.loads((install / "grants.json").read_text())
+                registry = json.loads((install / "grants.json").read_text(encoding="utf-8"))
                 self.assertEqual(len(registry["grants"]), 1)
                 self.assertEqual(registry["grants"][0]["secret"], second["secret"])
                 self.assertEqual({p.name for p in install.iterdir()},

@@ -38,10 +38,10 @@ async def check(args):
         note_created = False
         try:
             manage("enrol", "-Principal", "python")
-            previous = json.loads((install / "app-python.json").read_text())
+            previous = json.loads((install / "app-python.json").read_text(encoding="utf-8"))
             manage("enrol", "-Principal", "python")
             manage("enrol", "-Principal", "node")
-            credential = json.loads((install / "app-python.json").read_text())
+            credential = json.loads((install / "app-python.json").read_text(encoding="utf-8"))
             assert previous["secret"] != credential["secret"]
             process = subprocess.Popen([str(install / "e2emd.exe"), "--pipe", credential["socket_path"],
                                         "--grants", str(install / "grants.json"), "--idle-seconds", "1"],
@@ -60,6 +60,8 @@ async def check(args):
             if client is None:
                 raise RuntimeError("installed pipe did not become ready")
             expect_failure("uninstall")
+            for name in ["installation.json", "grants.json", "app-python.json", "app-node.json"]:
+                assert (install / name).is_file(), "live uninstall refusal must preserve user state"
             (install / "owner-note.txt").write_text("preserve")
             note_created = True
             try:
@@ -70,7 +72,7 @@ async def check(args):
                 await old.close()
                 raise AssertionError("rotated secret remained authorized")
             async with client:
-                cases = json.loads((ROOT / "tests/conformance/assessments.json").read_text())
+                cases = json.loads((ROOT / "tests/conformance/assessments.json").read_text(encoding="utf-8"))
                 node = await asyncio.create_subprocess_exec("node", str(ROOT / "sdk/node/check-agent.mjs"),
                             str(install / "app-node.json"), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 for fixture in cases:
@@ -85,7 +87,7 @@ async def check(args):
                 assert node_report["provider"] == client.capability_manifest["provider"]
                 # A broadened grant file must disable assessments and must not
                 # receive new secrets through ReplaceFile's preserved DACL.
-                node_credential = json.loads((install / "app-node.json").read_text())
+                node_credential = json.loads((install / "app-node.json").read_text(encoding="utf-8"))
                 async with await Client.open(node_credential["socket_path"], "node", node_credential["secret"], node_credential["provider"]) as acl_client:
                     subprocess.run(["icacls.exe", str(install / "grants.json"), "/grant", "*S-1-1-0:(R)"], check=True, capture_output=True)
                     try:
@@ -132,7 +134,7 @@ async def check(args):
                     shutdown_error = RuntimeError(f"service exit {process.returncode}: {stderr.decode(errors='replace')}")
             manage("uninstall")
             if note_created:
-                assert (install / "owner-note.txt").read_text() == "preserve"
+                assert (install / "owner-note.txt").read_text(encoding="utf-8") == "preserve"
                 (install / "owner-note.txt").unlink()
                 install.rmdir()
             if shutdown_error is not None:

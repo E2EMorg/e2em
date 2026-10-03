@@ -76,7 +76,7 @@ def main(argv=None):
         print("Installed. Start with: systemctl --user daemon-reload; systemctl --user enable --now e2emd")
         return
     private_dir(config)
-    marker = json.loads((config / "installation.json").read_text())
+    marker = json.loads((config / "installation.json").read_text(encoding="utf-8"))
     packaged_marker = (
         isinstance(marker, dict) and set(marker) == {"version", "packaged_binary"}
         and marker["version"] == 1 and isinstance(marker["packaged_binary"], str)
@@ -97,7 +97,7 @@ def main(argv=None):
         return
     if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}",args.principal): raise ValueError("principal must be a simple application slug")
     grants_path = config / "grants.json"
-    grants = json.loads(grants_path.read_text())
+    grants = json.loads(grants_path.read_text(encoding="utf-8"))
     grants["grants"] = [g for g in grants["grants"] if g["principal"] != args.principal]
     credential = config / "apps" / (args.principal+".json")
     if args.command == "revoke":

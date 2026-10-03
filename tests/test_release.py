@@ -25,7 +25,7 @@ class ReleaseTest(unittest.TestCase):
                 shutil.copyfile(ROOT / name, target)
             self.assertEqual(release_version(root), release_version(ROOT))
             target = root / "sdk/node/package.json"
-            manifest = json.loads(target.read_text())
+            manifest = json.loads(target.read_text(encoding="utf-8"))
             manifest["version"] = "0.2.0"
             target.write_text(json.dumps(manifest))
             with self.assertRaisesRegex(ValueError, "versions differ"):
