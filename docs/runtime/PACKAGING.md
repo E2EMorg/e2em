@@ -2,7 +2,7 @@
 
 The build produces `e2em-runtime-VERSION-TARGET.{msi,pkg,deb,rpm}` plus SHA-256
 checksums and JSON metadata. Version comes from `Cargo.toml`. These are unsigned
-release artifacts. Normal installers include the native inference worker and CPU ONNX Runtime. Offline variants (`e2em-runtime-VERSION-offline-TARGET`) also include verified Gandalf assets. No grants or credentials are included. Runtime inference needs no Python;
+release artifacts. Normal installers include the native inference worker and platform ONNX Runtime providers with CPU fallback. Linux includes CUDA dependencies, Windows includes DirectML, and macOS includes CoreML. Offline variants (`e2em-runtime-VERSION-offline-TARGET`) also include verified Gandalf assets. No grants or credentials are included. Runtime inference needs no Python;
 Python is only required for optional legacy setup scripts. No package script starts
 a root service or enrols applications automatically.
 
@@ -70,7 +70,7 @@ python3 scripts/package_runtime.py --format rpm --target x86_64-unknown-linux-mu
 ```
 
 Install the Rust target first. Linux tooling: `dpkg-deb` and `rpmbuild`.
-The Linux daemon is musl-static. Its separate inference worker is built for glibc 2.28; the CPU ONNX Runtime library needs glibc 2.27+ and libstdc++. The initial Linux CI target is x86_64; arm64 staging is
+The Linux daemon is musl-static. Its separate inference worker is built for glibc 2.28; the ONNX Runtime library needs glibc 2.27+ and libstdc++. GPU execution additionally needs a compatible NVIDIA driver. The native CUDA/cuDNN payload is larger than a CPU-only build and includes each component's licence notices. The initial Linux CI target is x86_64; arm64 staging is
 supported but not an advertised tested build. macOS builds separate Intel and
 Apple Silicon PKGs using `pkgbuild` and `productbuild`. Windows builds x64 MSI using WiX 4.0.6
 (`dotnet tool install --global wix --version 4.0.6` and

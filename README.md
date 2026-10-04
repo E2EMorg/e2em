@@ -43,7 +43,7 @@ assess("The launch is next week", custom_policies=["Keep launch dates private."]
 
 Custom text is added to the defaults. Use `policies=[]` to assess only custom text. No policy JSON file is needed. [Python, Node, Dart, and Rust examples](docs/SDK.md) cover persistent clients and result handling.
 
-**Default model:** [Gandalf](https://huggingface.co/krazyjakee/gandalf) runs locally on CPU. Normal setup downloads verified assets; offline installers bundle them. All default policies and custom text can be scored. Missing conversation for `spam.repeat` and truncated evidence remain explicit incomplete coverage. [Model selection and updates](docs/runtime/MODELS.md).
+**Default model:** [Gandalf](https://huggingface.co/krazyjakee/gandalf) runs locally, preferring a compatible GPU and falling back to CPU. Normal setup downloads verified assets; offline installers bundle them. All default policies and custom text can be scored. Missing conversation for `spam.repeat` and truncated evidence remain explicit incomplete coverage. [Model selection and updates](docs/runtime/MODELS.md).
 
 ### Try the reference chat
 
@@ -87,7 +87,7 @@ Open **E2EM Setup** after installation and choose **Set up E2EM**. The same scre
 flowchart LR
     A[Your chat app] --> B[Python, Node, or Dart SDK]
     B <-->|Authenticated local IPC| C[E2EM runtime]
-    C --> D[Gandalf CPU inference and email detector]
+    C --> D[Gandalf GPU/CPU inference and email detector]
     C --> E[Typed assessment]
     E --> A
     F[Rust or C/C++ host] --> G[Embedded E2EM core]

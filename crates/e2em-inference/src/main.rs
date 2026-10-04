@@ -218,25 +218,19 @@ impl PolicyScorer for Scorer {
                     masks[row * width + column] = 1;
                 }
             }
-            let loaded = session
-                .as_mut()
-                .ok_or_else(|| failure("session unavailable"))?;
-            let result = infer(loaded, batch.len(), width, &ids, &masks);
-            let values = if result.is_err()
-                && loaded.provider != "CPU"
-                && self.options.device == accelerator::Device::Auto
-            {
-                // Release the failed GPU session and its allocations before
-                // checking whether CPU fallback can be admitted. Retry once.
-                session.take();
-                let mut cpu = accelerator::cpu(&self.options).map_err(failure)?;
-                cpu.fallback_reasons
-                    .push("GPU execution failed; rebuilt CPU session".into());
-                *session = Some(cpu);
-                infer(session.as_mut().unwrap(), batch.len(), width, &ids, &masks)?
-            } else {
-                result?
-            };
+            let values = accelerator::retry_on_cpu(
+                &mut session,
+                self.options.device == accelerator::Device::Auto,
+                |loaded| loaded.provider != "CPU",
+                |loaded| infer(loaded, batch.len(), width, &ids, &masks),
+                || {
+                    let mut cpu = accelerator::cpu(&self.options).map_err(failure)?;
+                    cpu.fallback_reasons
+                        .push("GPU execution failed; rebuilt CPU session".into());
+                    Ok(cpu)
+                },
+                || failure("session unavailable"),
+            )?;
             scores.extend(values.iter().map(|&value| {
                 let logit = f64::from(value);
                 if logit >= 0.0 {

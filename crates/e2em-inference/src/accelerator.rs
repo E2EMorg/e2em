@@ -97,6 +97,28 @@ fn choose<T>(
     cpu().map(|value| (value, failures))
 }
 
+/// Retry a failed accelerator batch once, releasing device allocations before
+/// admitting and constructing a CPU session. CPU and strict GPU failures escape.
+pub fn retry_on_cpu<S, T, E>(
+    state: &mut Option<S>,
+    automatic: bool,
+    is_gpu: impl FnOnce(&S) -> bool,
+    mut run: impl FnMut(&mut S) -> Result<T, E>,
+    cpu: impl FnOnce() -> Result<S, E>,
+    missing: impl Fn() -> E,
+) -> Result<T, E> {
+    let loaded = state.as_mut().ok_or_else(&missing)?;
+    let gpu = is_gpu(loaded);
+    let result = run(loaded);
+    if result.is_err() && gpu && automatic {
+        state.take();
+        *state = Some(cpu()?);
+        run(state.as_mut().ok_or_else(missing)?)
+    } else {
+        result
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn cuda_contexts(
     model_bytes: u64,
@@ -301,5 +323,70 @@ mod tests {
             .0,
             "cpu"
         );
+    }
+
+    #[test]
+    fn failed_gpu_is_released_before_cpu_allocation_and_retry_is_bounded() {
+        use std::sync::{Arc, Mutex};
+        struct Fake {
+            gpu: bool,
+            events: Arc<Mutex<Vec<&'static str>>>,
+        }
+        impl Drop for Fake {
+            fn drop(&mut self) {
+                if self.gpu {
+                    self.events.lock().unwrap().push("GPU released");
+                }
+            }
+        }
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut state = Some(Fake {
+            gpu: true,
+            events: events.clone(),
+        });
+        let result = retry_on_cpu(
+            &mut state,
+            true,
+            |s| s.gpu,
+            |s| {
+                s.events
+                    .lock()
+                    .unwrap()
+                    .push(if s.gpu { "GPU run" } else { "CPU run" });
+                Err::<(), _>("execution failed")
+            },
+            || {
+                assert_eq!(*events.lock().unwrap(), ["GPU run", "GPU released"]);
+                events.lock().unwrap().push("CPU allocated");
+                Ok(Fake {
+                    gpu: false,
+                    events: events.clone(),
+                })
+            },
+            || "missing",
+        );
+        assert_eq!(result, Err("execution failed"));
+        assert_eq!(
+            *events.lock().unwrap(),
+            ["GPU run", "GPU released", "CPU allocated", "CPU run"]
+        );
+    }
+
+    #[test]
+    fn strict_gpu_and_cpu_execution_errors_cannot_trigger_a_retry() {
+        for (automatic, gpu) in [(false, true), (true, false)] {
+            let mut state = Some(gpu);
+            assert_eq!(
+                retry_on_cpu(
+                    &mut state,
+                    automatic,
+                    |s| *s,
+                    |_| Err::<(), _>("failed"),
+                    || panic!("fallback is forbidden"),
+                    || "missing"
+                ),
+                Err("failed")
+            );
+        }
     }
 }

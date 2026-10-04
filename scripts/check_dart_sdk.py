@@ -37,12 +37,21 @@ def main():
             'secret': 'a' * 64, 'provider': 'dart-test-provider'}), encoding='utf-8')
         for file in [grants, settings]:
             if os.name == 'nt':
-                # Elevated runners can assign the Administrators group as the
-                # default owner; the daemon requires the actual user's SID.
-                subprocess.run(['icacls.exe', str(file), '/setowner', f'*{sid}'],
-                               check=True, capture_output=True)
-                subprocess.run(['icacls.exe', str(file), '/inheritance:r', '/grant:r', f'*{sid}:(F)'],
-                               check=True, capture_output=True)
+                # Replace the DACL rather than adding one grant to a runner's
+                # existing ACL, which may contain explicit administrator ACEs.
+                subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', r'''
+$ErrorActionPreference = 'Stop'
+$env:PSModulePath = Join-Path $PSHOME 'Modules'
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
+$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$acl = New-Object Security.AccessControl.FileSecurity
+$acl.SetOwner($sid)
+$acl.SetAccessRuleProtection($true, $false)
+foreach ($owner in @($sid, (New-Object Security.Principal.SecurityIdentifier('S-1-5-18')))) {
+    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($owner, 'FullControl', 'Allow')))
+}
+Set-Acl -LiteralPath $env:E2EM_DART_PRIVATE_FILE -AclObject $acl
+'''], check=True, capture_output=True, env={**os.environ, 'E2EM_DART_PRIVATE_FILE': str(file)})
             else:
                 file.chmod(0o600)
         with (directory / 'runtime.log').open('wb') as log:
