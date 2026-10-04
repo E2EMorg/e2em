@@ -651,7 +651,7 @@ fn spawn_with_resources(
     let descriptor: Descriptor = read(&path.join("model.json"))?;
     descriptor.manifest.validate()?;
     let plan = resources.model_plan(descriptor.manifest.files["model.onnx"].bytes, 2)?;
-    let args: Vec<OsString> = vec![
+    let mut args: Vec<OsString> = vec![
         "--model".into(),
         path.as_os_str().into(),
         "--library".into(),
@@ -659,17 +659,44 @@ fn spawn_with_resources(
         "--threads".into(),
         plan.threads.to_string().into(),
     ];
-    let scorer = NativeProcessScorer::spawn_with_libraries(
+    let library_directory = config
+        .library
+        .parent()
+        .ok_or_else(|| io::Error::other("missing native library directory"))?;
+    let deadline = Instant::now() + timeout;
+    // Accelerator compilation can stall even when its provider registers.
+    // Reserve time to start a CPU worker within the original request budget.
+    let automatic = NativeProcessScorer::spawn_with_libraries_startup_budget(
         &config.worker,
         &args,
         timeout,
-        control,
-        config
-            .library
-            .parent()
-            .ok_or_else(|| io::Error::other("missing native library directory"))?,
-    )
-    .map_err(io::Error::other)?;
+        (timeout / 2).min(Duration::from_secs(10)),
+        control.clone(),
+        library_directory,
+    );
+    let scorer = match automatic {
+        Ok(scorer) => scorer,
+        Err(error) => {
+            if control.as_ref().is_some_and(RequestControl::stopped) || Instant::now() >= deadline {
+                return Err(io::Error::other(error));
+            }
+            // The first child has been killed and reaped before checking the
+            // CPU memory budget and starting its replacement.
+            super::resources::Resources::detect()?
+                .model_plan(descriptor.manifest.files["model.onnx"].bytes, plan.threads)?;
+            args.extend([OsString::from("--device"), OsString::from("cpu")]);
+            eprintln!("Automatic accelerator startup unavailable; retrying on CPU.");
+            NativeProcessScorer::spawn_with_libraries_startup_budget(
+                &config.worker,
+                &args,
+                timeout,
+                deadline.saturating_duration_since(Instant::now()),
+                control,
+                library_directory,
+            )
+            .map_err(io::Error::other)?
+        }
+    };
     let metadata = descriptor.manifest.metadata(path)?;
     if scorer.model_version() != metadata.model
         || scorer.tokenizer_version() != metadata.tokenizer
@@ -853,8 +880,7 @@ impl PolicyScorer for Router {
 mod resource_tests {
     use super::*;
 
-    #[test]
-    fn unsuitable_hardware_is_rejected_before_executing_a_worker() {
+    fn fixture() -> (tempfile::TempDir, Config) {
         let directory = tempfile::tempdir().unwrap();
         let package = serde_json::json!({"manifest": {
             "format": model::FORMAT, "id": "custom", "version": "1.0.0",
@@ -873,6 +899,91 @@ mod resource_tests {
             default: "custom".into(),
             models: BTreeMap::new(),
         };
+        (directory, config)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stalled_accelerator_is_reaped_before_cpu_startup_and_cancellation_prevents_retry() {
+        use std::os::unix::fs::PermissionsExt;
+        let (directory, mut config) = fixture();
+        config.worker = directory.path().join("worker.py");
+        let descriptor: Descriptor = read(&directory.path().join("model.json")).unwrap();
+        let ready = serde_json::to_string(&serde_json::json!({
+            "kind": "ready", "api_version": super::super::API_VERSION,
+            "metadata": descriptor.manifest.metadata(directory.path()).unwrap(),
+        }))
+        .unwrap();
+        let script = format!(
+            r#"#!/usr/bin/env python3
+import json, os, pathlib, struct, sys, time
+root = pathlib.Path(__file__).parent
+cpu = '--device' in sys.argv and sys.argv[sys.argv.index('--device')+1] == 'cpu'
+(root / ('cpu.pid' if cpu else 'auto.pid')).write_text(str(os.getpid()))
+if not cpu:
+    time.sleep(60)
+data = {ready:?}.encode()
+sys.stdout.buffer.write(struct.pack('>I',len(data))+data)
+sys.stdout.buffer.flush()
+sys.stdin.buffer.read()
+"#
+        );
+        fs::write(&config.worker, script).unwrap();
+        fs::set_permissions(&config.worker, fs::Permissions::from_mode(0o700)).unwrap();
+        let resources = super::super::resources::Resources {
+            total_memory_bytes: 32 * 1024 * 1024 * 1024,
+            available_memory_bytes: 8 * 1024 * 1024 * 1024,
+            cpu_threads: 2,
+        };
+        let started = Instant::now();
+        let scorer = spawn_with_resources(
+            &config,
+            directory.path(),
+            Duration::from_secs(2),
+            None,
+            resources,
+        )
+        .unwrap();
+        assert!(started.elapsed() < Duration::from_secs(3));
+        assert!(directory.path().join("cpu.pid").exists());
+        #[cfg(target_os = "linux")]
+        {
+            let pid = fs::read_to_string(directory.path().join("auto.pid")).unwrap();
+            assert!(
+                !Path::new(&format!("/proc/{pid}")).exists(),
+                "stalled accelerator must be reaped"
+            );
+        }
+        drop(scorer);
+        fs::remove_file(directory.path().join("cpu.pid")).unwrap();
+        fs::remove_file(directory.path().join("auto.pid")).unwrap();
+        let cancelled = RequestControl {
+            deadline: Instant::now() + Duration::from_secs(2),
+            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        };
+        assert!(
+            spawn_with_resources(
+                &config,
+                directory.path(),
+                Duration::from_secs(2),
+                Some(cancelled),
+                resources
+            )
+            .is_err()
+        );
+        assert!(
+            !directory.path().join("cpu.pid").exists(),
+            "cancelled requests must not start a CPU retry"
+        );
+        assert!(
+            !directory.path().join("auto.pid").exists(),
+            "cancelled requests must not start an accelerator worker"
+        );
+    }
+
+    #[test]
+    fn unsuitable_hardware_is_rejected_before_executing_a_worker() {
+        let (directory, config) = fixture();
         let mut resources = super::super::resources::Resources {
             total_memory_bytes: 32 * 1024 * 1024 * 1024,
             available_memory_bytes: 512 * 1024 * 1024,

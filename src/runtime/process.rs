@@ -148,13 +148,32 @@ impl NativeProcessScorer {
         timeout: Duration,
         control: Option<RequestControl>,
     ) -> Result<Self, BackendError> {
-        Self::spawn_inner(executable, arguments, timeout, control, None)
+        Self::spawn_inner(executable, arguments, timeout, timeout, control, None)
     }
     /// Use the trusted installation's library directory for native provider dependencies.
     pub fn spawn_with_libraries(
         executable: &Path,
         arguments: &[OsString],
         timeout: Duration,
+        control: Option<RequestControl>,
+        library_directory: &Path,
+    ) -> Result<Self, BackendError> {
+        Self::spawn_with_libraries_startup_budget(
+            executable,
+            arguments,
+            timeout,
+            timeout,
+            control,
+            library_directory,
+        )
+    }
+    /// Bound initialization separately while retaining the normal score timeout.
+    /// The startup budget also obeys an assessment's cancellation and deadline.
+    pub fn spawn_with_libraries_startup_budget(
+        executable: &Path,
+        arguments: &[OsString],
+        timeout: Duration,
+        startup_timeout: Duration,
         control: Option<RequestControl>,
         library_directory: &Path,
     ) -> Result<Self, BackendError> {
@@ -167,6 +186,7 @@ impl NativeProcessScorer {
             executable,
             arguments,
             timeout,
+            startup_timeout,
             control,
             Some(library_directory),
         )
@@ -175,6 +195,7 @@ impl NativeProcessScorer {
         executable: &Path,
         arguments: &[OsString],
         timeout: Duration,
+        startup_timeout: Duration,
         control: Option<RequestControl>,
         _library_directory: Option<&Path>,
     ) -> Result<Self, BackendError> {
@@ -182,10 +203,15 @@ impl NativeProcessScorer {
             || !executable.is_file()
             || timeout.is_zero()
             || timeout > Duration::from_secs(30)
+            || startup_timeout.is_zero()
+            || startup_timeout > timeout
         {
             return Err(error(
                 "native worker requires an absolute provisioned executable and a positive timeout of at most thirty seconds",
             ));
+        }
+        if control.as_ref().is_some_and(RequestControl::stopped) {
+            return Err(error("native worker startup cancelled or timed out"));
         }
         let mut command = Command::new(executable);
         #[cfg(target_os = "linux")]
@@ -285,7 +311,7 @@ impl NativeProcessScorer {
                 })
                 .map_err(|_| error("native worker reader could not start"))?,
         );
-        let deadline = std::time::Instant::now() + timeout;
+        let deadline = std::time::Instant::now() + startup_timeout;
         let metadata = loop {
             if std::time::Instant::now() >= deadline
                 || control.as_ref().is_some_and(RequestControl::stopped)
