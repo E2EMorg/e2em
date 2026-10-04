@@ -23,7 +23,7 @@ def launch_agent(binary, socket, grants, label=LABEL, idle_seconds=300, auto_upd
                              "--idle-seconds", str(idle_seconds)],
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},
-        "ProcessType": "Background",
+        "ProcessType": "Interactive",
         "Umask": 0o077,
         "ExitTimeOut": 10,
     }

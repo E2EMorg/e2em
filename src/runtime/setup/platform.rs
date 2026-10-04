@@ -202,8 +202,23 @@ pub(super) fn start(context: &Context, preferences: Preferences, restart: bool) 
             .iter()
             .map(|s| format!("<string>{}</string>", xml(s)))
             .collect::<String>();
+        // Unix-socket assessments are user-initiated and deadline-bound.
+        // They cannot use launchd's XPC-based Adaptive classification.
+        let diagnostics = if std::env::var_os("E2EM_NATIVE_DIAGNOSTICS").as_deref()
+            == Some(std::ffi::OsStr::new("1"))
+        {
+            format!(
+                "<key>StandardErrorPath</key><string>{}</string>",
+                xml(&context
+                    .root
+                    .join("startup-diagnostics.log")
+                    .to_string_lossy())
+            )
+        } else {
+            String::new()
+        };
         let plist = format!(
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>Label</key><string>org.e2em.runtime</string><key>ProgramArguments</key><array>{arguments}</array><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ProcessType</key><string>Background</string><key>Umask</key><integer>63</integer></dict></plist>"
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>Label</key><string>org.e2em.runtime</string><key>ProgramArguments</key><array>{arguments}</array><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ProcessType</key><string>Interactive</string><key>Umask</key><integer>63</integer>{diagnostics}</dict></plist>"
         );
         write_launcher(&path, plist.as_bytes())?;
         if preferences.start_at_login {

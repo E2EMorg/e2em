@@ -813,7 +813,12 @@ impl PolicyScorer for Router {
                 .begin_request(None, control, true)
                 .map_err(io::Error::other)
         };
-        execute().map_err(|_| BackendError::new("selected model unavailable"))
+        execute().map_err(|error| {
+            // Errors contain provisioning/resource diagnostics, never the
+            // private assessment text or policy wording.
+            eprintln!("Selected model unavailable: {error}");
+            BackendError::new("selected model unavailable")
+        })
     }
     fn supports_model_categories(&self) -> bool {
         true

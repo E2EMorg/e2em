@@ -39,6 +39,7 @@ def main():
     agent = home / 'Library/LaunchAgents/org.e2em.runtime.plist'
     if config.exists() or (unit.exists() if system == 'Linux' else agent.exists() if system == 'Darwin' else False):
         parser.error('refusing to overwrite an existing user installation')
+    os.environ['E2EM_NATIVE_DIAGNOSTICS'] = '1'
     processes = []
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -166,7 +167,10 @@ def main():
         if system == 'Darwin':
             diagnostic = subprocess.run(['launchctl', 'print', f'gui/{os.getuid()}/org.e2em.runtime'], capture_output=True, text=True)
             print(diagnostic.stdout, diagnostic.stderr, flush=True)
-            print(subprocess.run(['ps', '-axo', 'pid,ppid,command'], capture_output=True, text=True).stdout, flush=True)
+            processes_status = subprocess.run(['ps', '-axo', 'pid,ppid,command'], capture_output=True, text=True).stdout
+            print('\n'.join(line for line in processes_status.splitlines() if 'e2em' in line), flush=True)
+            log = config / 'startup-diagnostics.log'
+            if log.exists(): print(log.read_text(encoding='utf-8', errors='replace')[-16384:], flush=True)
         raise
     finally:
         for process in processes:
