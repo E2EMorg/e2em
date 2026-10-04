@@ -182,6 +182,9 @@ Recommends: systemd
 Recommends: xdg-utils
 Suggests: python3 >= 3.11
 # Rust musl executable is static. Keep automatic dependency scanning enabled.
+# The CUDA provider is loaded only when a usable GPU driver is present. Its
+# optional driver dependency must not prevent installation on CPU-only hosts.
+%global __requires_exclude ^libcuda[.]so[.]1($|[(])
 %global debug_package %{{nil}}
 %global __brp_strip %{{nil}}
 %description
