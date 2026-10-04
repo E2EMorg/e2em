@@ -25,6 +25,31 @@ pub struct Preferences {
 }
 
 #[cfg(test)]
+mod lock_tests {
+    use super::*;
+
+    #[test]
+    fn a_second_setup_session_reports_contention_and_can_retry() {
+        let temporary = tempfile::tempdir().unwrap();
+        let context = Context {
+            home: temporary.path().into(),
+            root: temporary.path().join("private"),
+            binary: PathBuf::new(),
+            endpoint: String::new(),
+            requested_app: None,
+            progress: Arc::new(std::sync::Mutex::new(json!({}))),
+        };
+        let first = context.lock().unwrap();
+        assert_eq!(
+            context.lock().unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
+        drop(first);
+        assert!(context.lock().is_ok());
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     fn fixture() -> (tempfile::TempDir, Context) {
@@ -229,7 +254,13 @@ impl Context {
             options.mode(0o600);
         }
         let file = options.open(path)?;
-        fs2::FileExt::try_lock_exclusive(&file)?;
+        fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
+            if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() {
+                io::Error::new(io::ErrorKind::WouldBlock, "E2EM Setup is already open.")
+            } else {
+                error
+            }
+        })?;
         Ok(file)
     }
 

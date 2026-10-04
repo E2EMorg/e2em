@@ -4,7 +4,7 @@ Thank you for helping improve the runtime and SDKs. Changes should focus on loca
 
 ## Development setup
 
-Use Rust 1.95+, Python 3.11+, and Node 22+. C/C++ ABI tests need a C and C++ compiler. The rules preview needs no model, GPU, or Python inference worker.
+Use Rust 1.95+, Python 3.11+, and Node 22+. Dart SDK development uses Dart 3.12.1 (the package supports Dart 3.5+). C/C++ ABI tests need a C and C++ compiler. The rules preview needs no model, GPU, or Python inference worker.
 
 ```sh
 cargo build --locked --workspace --all-features
@@ -24,6 +24,11 @@ E2EM_FFI_LIBRARY=target/debug/libe2em_ffi.so E2EM_ASAN=1 python3 -m unittest dis
 ```
 
 The Rust integration suite executes live Python/Node service fixtures. Ordinary Python discovery skips service/ABI checks when the required binary/library is absent; CI runs those explicitly.
+
+Dart SDK checks run from `sdk/dart`: `dart pub get --enforce-lockfile`,
+`dart analyze`, and `dart test`. After building the daemon, run
+`python3 scripts/check_dart_sdk.py --binary target/debug/e2emd` from the root
+for live shared-fixture conformance. CI runs Dart checks on all desktop targets.
 
 ## Contract changes
 
@@ -49,7 +54,7 @@ Open an issue for a substantial contract or capability change. Use small, focuse
 | `src/bin/e2emd.rs` | Native daemon |
 | `crates/e2em-ffi/` | C ABI and C/C++ examples |
 | `crates/e2em-platform/` | Narrow native OS adapters |
-| `sdk/python/`, `sdk/node/` | Local service clients |
+| `sdk/python/`, `sdk/node/`, `sdk/dart/` | Local service clients |
 | `scripts/` | Installation, packaging, bindings and platform/resource checks |
 | `tests/` | Runtime and SDK conformance, packaging and setup tests |
 | `docs/` | User/developer guides and historical preview evidence |

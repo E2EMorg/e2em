@@ -62,6 +62,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.12.1'
       - run: python3 -m pip install build
       - run: python3 scripts/package_sdks.py --output dist/sdk
       - name: Verify packaged Python SDK
@@ -78,6 +81,14 @@ jobs:
           npm init -y
           npm install "$PACKAGE"
           node --input-type=module -e "import {Client} from '@e2em/local'; if (typeof Client.open !== 'function') process.exit(1)"
+      - name: Verify packaged Dart SDK
+        run: |
+          CHECK_DIR=$(mktemp -d)
+          tar -xzf dist/sdk/e2em-dart-sdk-*.tar.gz -C "$CHECK_DIR"
+          cd "$CHECK_DIR"/e2em-dart-sdk-*
+          dart pub get --enforce-lockfile
+          dart analyze --fatal-infos
+          dart test
       - uses: actions/upload-artifact@v4
         with:
           name: e2em-sdk-packages

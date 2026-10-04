@@ -134,6 +134,14 @@ def main():
                 if state['stage'] == 'ready' and state.get('preferences') == preferences: break
                 time.sleep(.5)
             else: raise AssertionError('runtime did not restart with changed preferences')
+            if system == 'Linux':
+                enabled = subprocess.run(['systemctl', '--user', 'is-enabled', 'e2emd'], capture_output=True, text=True)
+                assert (enabled.stdout.strip() == 'enabled') == login
+            elif system == 'Darwin':
+                assert agent.exists() == login, 'login preference did not update the LaunchAgent'
+            else:
+                value = run('powershell.exe', '-NoProfile', '-Command', r"$v = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue; if ($v) { $v.'E2EM Runtime' }")
+                assert ('start-runtime.ps1' in value) == login
         if system == 'Windows':
             count = run('powershell.exe', '-NoProfile', '-Command', r'''@(Get-CimInstance Win32_Process -Filter "Name='e2emd.exe'" | Where-Object { $_.CommandLine -match '(^|\s)"?--grants"?(\s|$)' }).Count''')
             assert count.strip() == '1', 'setup created a duplicate background runtime'

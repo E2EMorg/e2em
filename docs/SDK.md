@@ -93,6 +93,35 @@ try {
 
 Node.js 22+; generated TypeScript types are included. `signal` supports cancellation. The browser entry point provides an explicit bridge interface; no browser transport is shipped.
 
+## Dart and Flutter desktop
+
+Linux, macOS, and Windows are supported. Mobile and web are outside this preview.
+Add a path dependency on the checkout's `sdk/dart` directory:
+
+```yaml
+dependencies:
+  e2em_local:
+    path: /path/to/e2em/sdk/dart
+```
+
+After one-time runtime setup and app enrolment:
+
+```dart
+import 'package:e2em_local/e2em.dart';
+
+final report = await assess('Hello there!', app: 'daccord');
+print(report.scores);
+print(report.unevaluated);
+```
+
+Use `context`, `policies`, and `customPolicies` lists for earlier conversation,
+preset subsets, and custom text. Use `policies: []` for custom-only assessment.
+Keep one `Client.connect(app: 'daccord')` open for a chat session and close it in
+`finally`. A `CancellationToken` supports cancellation; `report.appliesTo` checks
+the current complete request snapshot before sending. Dart 3.5+; no inference
+dependencies. The [Dart SDK guide](../sdk/dart/README.md) includes advanced
+requests, discovery, model operations, and a send-flow example.
+
 ## Rust
 
 Embedded use needs no running service, app enrolment, or credentials:
@@ -134,11 +163,11 @@ Unavailable model/custom checks report `MODEL_UNAVAILABLE`; unimplemented determ
 
 ## Local service setup
 
-Python and Node connect to the installed local service. `app` defaults to `my-app`, matching the [setup guide](INSTALL.md). Once your app is enrolled, `Client.connect`, `BlockingClient`, and standalone `assess` load its local settings automatically. There is no account sign-in, remote service, or manual credential argument in the quick start.
+Python, Node, and Dart connect to the installed local service. `app` defaults to `my-app`, matching the [setup guide](INSTALL.md). Once your app is enrolled, `Client.connect`, `BlockingClient`, and standalone `assess` load its local settings automatically. There is no account sign-in, remote service, or manual credential argument in the quick start.
 
 The service authenticates each app to keep its policies and requests separate from other enrolled apps. Its private local token is created by setup and read by the SDK. Embedded Rust/C assessment runs inside your app and does not need this token. Installing the runtime alone does not start it or enrol an app.
 
-Default settings for `my-app` are stored at `~/.config/e2em/apps/my-app.json` on Linux/macOS and `%LOCALAPPDATA%\E2EM\app-my-app.json` on Windows. Use `config_path` in Python or `configPath` in Node for an explicitly provisioned alternative. SDK loaders check private Unix file ownership and permissions. Keep these installer-managed settings out of source control.
+Default settings for `my-app` are stored at `~/.config/e2em/apps/my-app.json` on Linux/macOS and `%LOCALAPPDATA%\E2EM\app-my-app.json` on Windows. Use `config_path` in Python or `configPath` in Node/Dart for an explicitly provisioned alternative. SDK loaders check private Unix file ownership and permissions. Keep these installer-managed settings out of source control.
 
 ## Advanced integration and policy files
 
@@ -146,7 +175,7 @@ Files are optional. For bulk rules, strict message thresholds, policy versioning
 
 `Client.open` still accepts explicit provisioned connection details; `discover` accepts a candidate list and an optional required-detector list. Requiring a detector means the chosen provider must actually implement it. Do not silently retry or switch providers on errors.
 
-Before sending, compare the report with the current message, context, and policy snapshot. Simple reports expose `report.request`; use Python `applies_to(current_request)` or Node `appliesTo(currentRequest)`. Invalidate after any edit. `integration::RevisionGuard` provides the Rust send guard. Allow only `allow`, or an explicitly confirmed `warn` permitted by policy. Hold errors, cancellations, stale results, incomplete coverage, and `review` for editing or review. Recheck after warning confirmation.
+Before sending, compare the report with the current message, context, and policy snapshot. Simple reports expose `report.request`; use Python `applies_to(current_request)` or Node/Dart `appliesTo(currentRequest)`. Invalidate after any edit. `integration::RevisionGuard` provides the Rust send guard. Allow only `allow`, or an explicitly confirmed `warn` permitted by policy. Hold errors, cancellations, stale results, incomplete coverage, and `review` for editing or review. Recheck after warning confirmation.
 
 Context is optional. Advanced rules can require a supplied window; missing required context produces an indeterminate report. Limits are 32 prior messages, 16,384 UTF-8 bytes per message, 65,536 total text bytes, 64 rules, and 512 bytes per custom policy text. See the [contract](runtime/CONTRACT.md) for deadlines and full semantics. The service grants personal warning/review authority; platform enforcement and block policies remain unsupported.
 
@@ -154,6 +183,6 @@ Context is optional. Advanced rules can require a supplied window; missing requi
 
 Download a native C SDK archive or build with `cargo build --locked -p e2em-ffi`. Include [`e2em.h`](../crates/e2em-ffi/include/e2em.h), link `e2em_ffi`, and use UTF-8 Call JSON. The C ABI is an advanced embedding interface and has no service credentials. The [ownership guide](../crates/e2em-ffi/README.md) and [examples](../crates/e2em-ffi/examples) cover polling and handle lifetimes.
 
-Spans are half-open UTF-8 byte offsets into original text. Python `utf16_span` and Node `utf16Span` convert spans for UTF-16 UIs and reject code point splits. Runtime errors do not echo message text. SDK errors expose fixed codes; unavailable providers and malformed replies hold the draft for review. The application owns sending, encryption, display, and logging. See the [security boundaries](runtime/SECURITY.md).
+Spans are half-open UTF-8 byte offsets into original text. Python `utf16_span` and Node/Dart `utf16Span` convert spans for UTF-16 UIs and reject code point splits. Runtime errors do not echo message text. SDK errors expose fixed codes; unavailable providers and malformed replies hold the draft for review. The application owns sending, encryption, display, and logging. See the [security boundaries](runtime/SECURITY.md).
 
-SDK packages are attached to [GitHub Releases](https://github.com/E2EMorg/e2em/releases). PyPI, npm, and crates.io publication is not enabled.
+SDK packages are attached to [GitHub Releases](https://github.com/E2EMorg/e2em/releases). PyPI, npm, pub.dev, and crates.io publication is not enabled.

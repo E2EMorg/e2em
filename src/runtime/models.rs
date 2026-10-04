@@ -419,6 +419,10 @@ impl Manager {
                 return Ok(previous.manifest);
             }
         }
+        // Refuse unsuitable hosts before downloading model assets or executing
+        // the candidate's startup smoke check.
+        super::resources::Resources::detect()?
+            .model_plan(candidate.manifest.files["model.onnx"].bytes, 2)?;
         let root = self.root()?;
         let package_name = format!(
             "{}-{}-{}",
@@ -629,12 +633,31 @@ fn spawn(
     timeout: Duration,
     control: Option<RequestControl>,
 ) -> io::Result<NativeProcessScorer> {
+    spawn_with_resources(
+        config,
+        path,
+        timeout,
+        control,
+        super::resources::Resources::detect()?,
+    )
+}
+fn spawn_with_resources(
+    config: &Config,
+    path: &Path,
+    timeout: Duration,
+    control: Option<RequestControl>,
+    resources: super::resources::Resources,
+) -> io::Result<NativeProcessScorer> {
     let descriptor: Descriptor = read(&path.join("model.json"))?;
+    descriptor.manifest.validate()?;
+    let plan = resources.model_plan(descriptor.manifest.files["model.onnx"].bytes, 2)?;
     let args: Vec<OsString> = vec![
         "--model".into(),
         path.as_os_str().into(),
         "--library".into(),
         config.library.as_os_str().into(),
+        "--threads".into(),
+        plan.threads.to_string().into(),
     ];
     let scorer = NativeProcessScorer::spawn_controlled(&config.worker, &args, timeout, control)
         .map_err(io::Error::other)?;
@@ -814,5 +837,67 @@ impl PolicyScorer for Router {
         policies: &[String],
     ) -> Result<Vec<f64>, BackendError> {
         self.with(|s| s.score_many(message, context, policies))
+    }
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+
+    #[test]
+    fn unsuitable_hardware_is_rejected_before_executing_a_worker() {
+        let directory = tempfile::tempdir().unwrap();
+        let package = serde_json::json!({"manifest": {
+            "format": model::FORMAT, "id": "custom", "version": "1.0.0",
+            "source": "https://example.org", "source_revision": "test", "license": "MIT",
+            "max_tokens": 512, "tail_tokens": 64, "evidence_format": "target-first",
+            "files": {
+                "model.onnx": {"bytes": 284315095, "sha256": "a".repeat(64), "url": "https://example.org/model"},
+                "tokenizer.json": {"bytes": 4, "sha256": "a".repeat(64), "url": "https://example.org/tokenizer"}
+            }
+        }});
+        write(&directory.path().join("model.json"), &package).unwrap();
+        let config = Config {
+            version: 1,
+            worker: directory.path().join("absent-worker"),
+            library: directory.path().join("absent-library"),
+            default: "custom".into(),
+            models: BTreeMap::new(),
+        };
+        let mut resources = super::super::resources::Resources {
+            total_memory_bytes: 32 * 1024 * 1024 * 1024,
+            available_memory_bytes: 512 * 1024 * 1024,
+            cpu_threads: 2,
+        };
+        let error = spawn_with_resources(
+            &config,
+            directory.path(),
+            Duration::from_secs(1),
+            None,
+            resources,
+        )
+        .err()
+        .expect("resource gate must reject the worker");
+        assert!(
+            error
+                .to_string()
+                .contains("insufficient RAM for CPU inference")
+        );
+        // Recovery passes admission and reaches executable validation instead.
+        resources.available_memory_bytes = 8 * 1024 * 1024 * 1024;
+        let error = spawn_with_resources(
+            &config,
+            directory.path(),
+            Duration::from_secs(1),
+            None,
+            resources,
+        )
+        .err()
+        .expect("fixture executable is deliberately absent");
+        assert!(
+            error
+                .to_string()
+                .contains("absolute provisioned executable")
+        );
     }
 }

@@ -41,7 +41,7 @@ assess("Hello there!", policies=["identity.hate", "abuse.threat"])
 assess("The launch is next week", custom_policies=["Keep launch dates private."])
 ```
 
-Custom text is added to the defaults. Use `policies=[]` to assess only custom text. No policy JSON file is needed. [Python, Node, and Rust examples](docs/SDK.md) cover persistent clients and result handling.
+Custom text is added to the defaults. Use `policies=[]` to assess only custom text. No policy JSON file is needed. [Python, Node, Dart, and Rust examples](docs/SDK.md) cover persistent clients and result handling.
 
 **Default model:** [Gandalf](https://huggingface.co/krazyjakee/gandalf) runs locally on CPU. Normal setup downloads verified assets; offline installers bundle them. All default policies and custom text can be scored. Missing conversation for `spam.repeat` and truncated evidence remain explicit incomplete coverage. [Model selection and updates](docs/runtime/MODELS.md).
 
@@ -78,14 +78,14 @@ Open **E2EM Setup** after installation and choose **Set up E2EM**. The same scre
 - **Local processing.** Assessment uses local IPC or an embedded library. It sends no messages to a remote service and creates no telemetry or message cache.
 - **One shared runtime.** Enrolled applications share a bounded worker, with separate authenticated principals and policies.
 - **Clear outcomes.** Versioned policies, typed errors, coverage, and revision checks let apps make deliberate decisions.
-- **Small integrations.** Python and Node clients need no inference dependencies. Rust and C/C++ can embed the core.
-- **Predictable resources.** Queues, frames, deadlines, and result sizes are bounded. Idle eviction and memory-pressure handling manage backend lifetime.
+- **Small integrations.** Python, Node, and Dart clients need no inference dependencies. Rust and C/C++ can embed the core.
+- **Predictable resources.** CPU/RAM admission checks refuse model startup without enough available memory, and inference uses at most two available CPU threads. Queues, frames, deadlines, and result sizes are bounded. Idle eviction and memory-pressure handling manage backend lifetime. [Hardware admission](docs/runtime/MODELS.md#hardware-admission).
 
 ### How it fits together
 
 ```mermaid
 flowchart LR
-    A[Your chat app] --> B[Python or Node SDK]
+    A[Your chat app] --> B[Python, Node, or Dart SDK]
     B <-->|Authenticated local IPC| C[E2EM runtime]
     C --> D[Gandalf CPU inference and email detector]
     C --> E[Typed assessment]
@@ -100,12 +100,13 @@ Managed setup enables [background runtime updates](docs/runtime/UPDATING.md). Up
 
 ### SDKs at a glance
 
-SDK packages are attached to the same [versioned GitHub Releases](https://github.com/E2EMorg/e2em/releases) as the runtime. **PyPI, npm, and crates.io publication is not enabled.** Install the downloaded package or use the source checkout.
+SDK packages are attached to the same [versioned GitHub Releases](https://github.com/E2EMorg/e2em/releases) as the runtime. **PyPI, npm, pub.dev, and crates.io publication is not enabled.** Install the downloaded package or use the source checkout.
 
 | Integration | Requirement | Install from a checkout | Guide |
 | :--- | :--- | :--- | :--- |
 | Python | Python 3.11+ | `python3 -m pip install ./sdk/python` | [Python SDK](sdk/python/README.md) |
 | JavaScript / TypeScript | Node.js 22+ | `npm install ./sdk/node` | [Node SDK](sdk/node/README.md) |
+| Dart / Flutter desktop | Dart 3.5+; Linux, macOS, Windows | Path dependency on `sdk/dart` | [Dart SDK](sdk/dart/README.md) |
 | Rust | Rust 1.95+ | `e2em-runtime` path or tagged Git dependency | [Rust SDK](docs/SDK.md#rust) |
 | C / C++ | C ABI 1 | Link `e2em_ffi`; include `e2em.h` | [C ABI](crates/e2em-ffi/README.md) |
 
@@ -116,7 +117,7 @@ python3 -m pip install ./e2em_local-0.1.2-py3-none-any.whl
 npm install ./e2em-local-0.1.2.tgz
 ```
 
-Rust SDK source and native C ABI archives are also included. Python/Node SDKs connect to an installed and enrolled runtime; installing an SDK alone does not start one.
+Dart/Rust SDK source and native C ABI archives are also included. Python/Node/Dart SDKs connect to an installed and enrolled runtime; installing an SDK alone does not start one. Dart mobile and web support are outside this preview.
 
 ### Handle the result
 
@@ -146,7 +147,7 @@ The app must recheck the current snapshot at the actual send boundary, including
 | Personal `warn` / `review` policies | Platform enforcement and block policies |
 | Preserved original text and optional UTF-8 spans | Message rewriting |
 | Authenticated desktop IPC, cancellation, revision checks | Browser extension transport and sandbox brokers |
-| Rust core and C ABI; Python and Node clients | OS-supplied providers or automatic provider discovery |
+| Rust core and C ABI; Python, Node, and Dart desktop clients | OS-supplied providers or automatic provider discovery |
 
 `capabilities()` is authoritative for the running provider. The service reports its model and tokenizer identity; model qualification remains a separate evaluation task. Account authentication and enrolment separate cooperating apps; they do not isolate secrets from a hostile process running as the same OS user. Read the [security boundaries](docs/runtime/SECURITY.md) before embedding or deploying.
 

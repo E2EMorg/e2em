@@ -2,6 +2,8 @@ E2EM 0.1.2 now includes guided onboarding on every desktop platform. Install the
 
 Gandalf is the default CPU model for the shared runtime, with all 40 default policies, optional conversation and custom policy strings. Normal setup downloads verified model assets; offline installers include the same weights. SDKs can select registered custom models and owner-authorized applications can install compatible model manifests from HTTPS URLs.
 
+CPU/RAM admission checks now reject model startup before downloading or loading weights when available memory is insufficient, and cap inference at two available CPU threads. Setup reports the resource diagnostic so it can be retried after memory is freed.
+
 [Installation guide](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/INSTALL.md) · [SDK guide](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/SDK.md) · [Model format and controls](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/runtime/MODELS.md)
 
 Choose the normal installer for your platform, or its `-offline-` counterpart to include Gandalf:
@@ -18,6 +20,6 @@ Installers are unsigned. Model descriptors are separately Ed25519 signed; assets
 
 Gandalf 0.0.1 is distributed under the owner-authorized MIT licence with upstream attribution, base-model licence and pinned provenance retained. The FP32 ONNX export passes comparison against the original checkpoint. Supporting all policies does not establish their accuracy: published policy thresholds are retained, other wordings use fallback thresholds. Missing required conversation and evidence exceeding 512 tokens produce an indeterminate review outcome. No per-category quality guarantee, block enforcement or sandbox broker is claimed.
 
-Python wheel/source, Node archive, Rust source and native C SDKs accompany the runtime. Registry publication is not configured. Linux inference needs glibc 2.28+ and libstdc++; the daemon itself is musl-static. CPU inference needs no GPU or Python model packages.
+Python wheel/source, Node archive, Dart SDK source, Rust source and native C SDKs accompany the runtime. The Dart SDK supports Dart and Flutter desktop applications. Registry publication is not configured. Linux inference needs glibc 2.28+ and libstdc++; the daemon itself is musl-static. CPU inference needs no GPU or Python model packages.
 
 Release publication requires native inference, installer install/upgrade/remove and guided onboarding gates on Linux, Windows and both Mac architectures. Reports and `SHA256SUMS` accompany the assets. Checksums establish byte integrity; model signatures do not sign the installers. This release's installers and SDKs have been rebuilt and replaced to include guided onboarding; `release-provenance.json` identifies the exact source commit and build run.

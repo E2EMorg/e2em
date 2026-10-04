@@ -101,7 +101,9 @@ def main(argv=None):
                 path.unlink()
             if not any(apps.iterdir()):
                 apps.rmdir()
-        managed = [agent, config / "grants.json", config / "installation.json"]
+        managed = [config / "grants.json", config / "installation.json"]
+        if agent.exists(): managed.append(agent)
+        if (config / 'start-runtime.plist').exists(): managed.append(config / 'start-runtime.plist')
         if (config / 'onboarding.json').exists(): managed.append(config / 'onboarding.json')
         if "packaged_binary" not in marker:
             managed.append(binary)

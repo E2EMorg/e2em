@@ -35,7 +35,8 @@ required-features = ["runtime-probes"]
 
 [features]
 default = ["runtime-service"]
-runtime-service = ["dep:tokio", "dep:rustix", "dep:getrandom", "dep:e2em-platform", "dep:ureq", "dep:semver", "dep:tempfile", "dep:ed25519-dalek", "dep:fs2"]
+runtime-service = ["resource-preflight", "dep:tokio", "dep:rustix", "dep:getrandom", "dep:e2em-platform", "dep:ureq", "dep:semver", "dep:tempfile", "dep:ed25519-dalek", "dep:fs2"]
+resource-preflight = ["dep:sysinfo"]
 runtime-probes = []
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
@@ -57,6 +58,7 @@ regex = "1.13.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10.9"
+sysinfo = { version = "0.39.6", optional = true, default-features = false, features = ["system"] }
 thiserror = "2.0"
 unicode-normalization = "0.1.25"
 

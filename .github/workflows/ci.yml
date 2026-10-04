@@ -40,7 +40,7 @@ jobs:
       - run: |
           cargo run --locked --example export_runtime_schema
           python3 scripts/generate_runtime_bindings.py
-          git diff --exit-code -- docs/runtime/schemas sdk/node/contract.d.ts sdk/node/response.schema.json sdk/python/e2em/types.py sdk/python/e2em/response.schema.json sdk/node/presets.json sdk/python/e2em/presets.json
+          git diff --exit-code -- docs/runtime/schemas sdk/node/contract.d.ts sdk/node/response.schema.json sdk/python/e2em/types.py sdk/python/e2em/response.schema.json sdk/node/presets.json sdk/python/e2em/presets.json sdk/dart/lib/src/data.g.dart
 
   python:
     runs-on: ubuntu-latest
@@ -51,3 +51,31 @@ jobs:
           python-version: '3.11'
       - run: python3 -m compileall -q scripts tests sdk/python
       - run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+  dart:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, windows-latest, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: sdk/dart
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.12.1'
+      - run: dart pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test example
+      - run: dart analyze --fatal-infos
+      - run: dart test
+      - run: cargo build --locked --bin e2emd
+        working-directory: .
+      - run: python scripts/check_dart_sdk.py --binary target/debug/e2emd
+        working-directory: .

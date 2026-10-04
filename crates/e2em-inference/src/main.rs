@@ -5,6 +5,7 @@ use e2em_runtime::{
     runtime::{
         model::{Descriptor, Manifest, Metadata},
         process::serve_worker,
+        resources::Resources,
     },
 };
 use ort::{session::Session, value::Tensor};
@@ -165,6 +166,9 @@ impl PolicyScorer for Scorer {
         let mut session = self.session.lock().map_err(failure)?;
         let mut scores = Vec::with_capacity(policies.len());
         for batch in encoded.chunks(8) {
+            Resources::detect()
+                .and_then(Resources::admit_inference)
+                .map_err(failure)?;
             let width = batch
                 .iter()
                 .map(Encoding::len)
@@ -213,6 +217,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let descriptor: Descriptor =
         serde_json::from_slice(&std::fs::read(args.model.join("model.json"))?)?;
+    descriptor.manifest.validate()?;
+    // Also protect direct worker invocation, before asset hashing or ONNX load.
+    let plan = Resources::detect()?.model_plan(
+        descriptor.manifest.files["model.onnx"].bytes,
+        usize::from(args.threads),
+    )?;
     descriptor.manifest.verify(&args.model)?;
     let metadata = descriptor.manifest.metadata(&args.model)?;
     // The library path comes from trusted installation config, never the model URL.
@@ -220,7 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_name("e2em-inference")
         .commit();
     let session = Session::builder()?
-        .with_intra_threads(usize::from(args.threads))?
+        .with_intra_threads(plan.threads)?
         .with_inter_threads(1)?
         .commit_from_file(args.model.join("model.onnx"))?;
     let mut tokenizer =

@@ -194,7 +194,8 @@ pub(super) fn start(context: &Context, preferences: Preferences, restart: bool) 
         )?;
         let directory = context.home.join("Library/LaunchAgents");
         fs::create_dir_all(&directory)?;
-        let path = directory.join("org.e2em.runtime.plist");
+        let login_path = directory.join("org.e2em.runtime.plist");
+        let path = context.root.join("start-runtime.plist");
         let mut arguments = vec![context.binary.to_string_lossy().into_owned()];
         arguments.extend(args);
         let arguments = arguments
@@ -205,9 +206,20 @@ pub(super) fn start(context: &Context, preferences: Preferences, restart: bool) 
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>Label</key><string>org.e2em.runtime</string><key>ProgramArguments</key><array>{arguments}</array><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ProcessType</key><string>Background</string><key>Umask</key><integer>63</integer></dict></plist>"
         );
         write_launcher(&path, plist.as_bytes())?;
+        if preferences.start_at_login {
+            write_launcher(&login_path, plist.as_bytes())?;
+        } else if login_path.exists() {
+            if !fs::symlink_metadata(&login_path)?.is_file() {
+                return Err(io::Error::other(
+                    "Refusing to remove a linked startup file.",
+                ));
+            }
+            fs::remove_file(&login_path)?;
+        }
         let domain = format!("gui/{}", rustix::process::getuid().as_raw());
-        // launchctl's disabled state survives reboot; always restore it when
-        // changing the login preference, rather than deleting a live plist.
+        // Keep the current session running even when login startup is off.
+        // Only plists in LaunchAgents are loaded automatically at next login;
+        // the private copy can be bootstrapped without disabling the live job.
         let service = format!("{domain}/org.e2em.runtime");
         command(Command::new("launchctl").args(["enable", &service]))?;
         if restart
@@ -231,9 +243,6 @@ pub(super) fn start(context: &Context, preferences: Preferences, restart: bool) 
                     .arg(&domain)
                     .arg(&path),
             )?;
-        }
-        if !preferences.start_at_login {
-            command(Command::new("launchctl").args(["disable", &service]))?;
         }
     }
     #[cfg(windows)]

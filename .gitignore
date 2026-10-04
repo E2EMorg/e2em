@@ -3,6 +3,7 @@
 .venv/
 venv/
 node_modules/
+.dart_tool/
 __pycache__/
 *.py[cod]
 *.egg-info/

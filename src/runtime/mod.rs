@@ -7,6 +7,8 @@ pub mod model;
 pub mod models;
 pub mod presets;
 pub mod process;
+#[cfg(feature = "resource-preflight")]
+pub mod resources;
 pub mod scheduler;
 #[cfg(feature = "runtime-service")]
 pub mod service;

@@ -32,6 +32,10 @@ def release_version(root=ROOT):
         versions[name] = tomllib.loads((root / name).read_text(encoding="utf-8"))["package"]["version"]
     versions["sdk/python/pyproject.toml"] = tomllib.loads((root / "sdk/python/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     versions["sdk/node/package.json"] = json.loads((root / "sdk/node/package.json").read_text(encoding="utf-8"))["version"]
+    dart_version = re.findall(r'^version:\s*([^\s]+)\s*$', (root / 'sdk/dart/pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE)
+    if len(dart_version) != 1:
+        raise ValueError('Dart SDK must declare one release version')
+    versions['sdk/dart/pubspec.yaml'] = dart_version[0]
     if len(set(versions.values())) != 1:
         raise ValueError(f"runtime and SDK versions differ: {versions}")
     version = versions["Cargo.toml"]
@@ -70,6 +74,7 @@ def verify_assets(directory, version):
         f"e2em_local-{version}.tar.gz",
         f"e2em-local-{version}.tgz",
         f"e2em-rust-sdk-{version}.tar.gz",
+        f"e2em-dart-sdk-{version}.tar.gz",
         *[f"e2em-c-sdk-{version}-{target}.zip" for target in (
             "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc",
             "x86_64-apple-darwin", "aarch64-apple-darwin")],

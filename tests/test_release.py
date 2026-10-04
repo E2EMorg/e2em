@@ -33,7 +33,7 @@ class ReleaseTest(unittest.TestCase):
             root = Path(directory)
             for name in ("Cargo.toml", "crates/e2em-ffi/Cargo.toml", "crates/e2em-platform/Cargo.toml",
                          "crates/e2em-inference/Cargo.toml",
-                         "sdk/python/pyproject.toml", "sdk/node/package.json"):
+                         "sdk/python/pyproject.toml", "sdk/node/package.json", "sdk/dart/pubspec.yaml"):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / name, target)

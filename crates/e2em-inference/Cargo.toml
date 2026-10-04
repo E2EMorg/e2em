@@ -7,7 +7,7 @@ license = "MIT"
 description = "Disposable native ONNX policy scorer for E2EM"
 
 [dependencies]
-e2em-runtime = { path = "../..", default-features = false }
+e2em-runtime = { path = "../..", default-features = false, features = ["resource-preflight"] }
 clap = { version = "4.5", features = ["derive"] }
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "load-dynamic", "api-23"] }
 tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
