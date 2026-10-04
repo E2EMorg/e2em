@@ -78,8 +78,9 @@ class PackageTest(unittest.TestCase):
                     bundle = stage / 'Applications/E2EM Setup.app/Contents'
                     self.assertEqual(plistlib.loads((bundle / 'Info.plist').read_bytes())['CFBundleExecutable'], 'E2EM Setup')
                     launcher = bundle / 'MacOS/E2EM Setup'
-                    self.assertTrue(launcher.stat().st_mode & 0o111)
-                    self.assertIn('e2emd --setup', launcher.read_text())
+                    if os.name == 'posix':
+                        self.assertTrue(launcher.stat().st_mode & 0o111)
+                    self.assertIn('e2emd --setup', launcher.read_text(encoding='utf-8'))
                 if platform == 'windows':
                     self.assertEqual((stage / 'e2em-setup.exe').read_bytes(), binary.read_bytes())
 
@@ -140,7 +141,7 @@ class PackageTest(unittest.TestCase):
             staged = package.build('pkg', binary, 'aarch64-apple-darwin', root / 'out', '1.2.3', True)
             distribution = ET.parse(staged / 'distribution.xml')
             self.assertEqual(distribution.find('conclusion').get('file'), 'conclusion.html')
-            self.assertIn('Applications → E2EM Setup', (staged / 'resources/conclusion.html').read_text())
+            self.assertIn('Applications → E2EM Setup', (staged / 'resources/conclusion.html').read_text(encoding='utf-8'))
 
 
 @unittest.skipUnless(os.name == 'posix', 'Unix setup tools require POSIX ownership')
