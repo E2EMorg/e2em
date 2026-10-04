@@ -266,10 +266,10 @@ if ($env:E2EM_SETUP_LOGIN -eq 'yes') {
 } else { Remove-ItemProperty -Path $key -Name 'E2EM Runtime' -ErrorAction SilentlyContinue }
 $binary = $env:E2EM_SETUP_BINARY
 if ($env:E2EM_SETUP_RESTART -eq 'yes') {
-    Get-CimInstance Win32_Process -Filter "Name='e2emd.exe'" | Where-Object { $_.ExecutablePath -eq $binary -and $_.CommandLine -match ' --grants ' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+    Get-CimInstance Win32_Process -Filter "Name='e2emd.exe'" | Where-Object { $_.ExecutablePath -eq $binary -and $_.CommandLine -match '(^|\s)"?--grants"?(\s|$)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
     Start-Sleep -Seconds 2
 }
-if (-not (Get-CimInstance Win32_Process -Filter "Name='e2emd.exe'" | Where-Object { $_.ExecutablePath -eq $binary -and $_.CommandLine -match ' --grants ' })) {
+if (-not (Get-CimInstance Win32_Process -Filter "Name='e2emd.exe'" | Where-Object { $_.ExecutablePath -eq $binary -and $_.CommandLine -match '(^|\s)"?--grants"?(\s|$)' })) {
     & $env:E2EM_SETUP_STARTUP
 }
 "#]).env("E2EM_SETUP_RESTART",if restart {"yes"} else {"no"}).env("E2EM_SETUP_LOGIN",if preferences.start_at_login {"yes"} else {"no"}).env("E2EM_SETUP_STARTUP",&startup).env("E2EM_SETUP_BINARY",&context.binary))?;

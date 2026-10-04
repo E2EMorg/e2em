@@ -18,7 +18,7 @@ class ReleaseTest(unittest.TestCase):
     def test_every_native_onboarding_report_must_pass(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            report = {key: True for key in ('guided_setup', 'model_assessment', 'autostart',
+            report = {key: True for key in ('guided_setup', 'model_assessment', 'autostart', 'preferences_restart',
                 'reopen', 'retry', 'credentials_preserved', 'foreign_origin_rejected')}
             for name in ONBOARDING_REPORTS:
                 (root / name).write_text(json.dumps(report))

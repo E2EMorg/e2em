@@ -20,7 +20,7 @@ def verify_onboarding(directory):
     for name in ONBOARDING_REPORTS:
         report = json.loads((directory / name).read_text(encoding='utf-8'))
         if not all(report.get(check) is True for check in (
-            'guided_setup', 'model_assessment', 'autostart', 'reopen', 'retry',
+            'guided_setup', 'model_assessment', 'autostart', 'preferences_restart', 'reopen', 'retry',
             'credentials_preserved', 'foreign_origin_rejected',
         )):
             raise ValueError(f'guided onboarding qualification did not pass: {name}')

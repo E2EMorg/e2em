@@ -122,6 +122,21 @@ def main():
         assert request('status')['stage'] == 'ready'
         duplicate = run(binary, '--setup', '--setup-no-browser')
         assert 'already open' in duplicate
+        # Preference changes must restart the existing runtime with its new
+        # flags, including Windows processes whose argument names are quoted.
+        for login in (False, True):
+            preferences = {'offline': True, 'auto_update': False, 'start_at_login': login}
+            request('start', preferences)
+            deadline = time.monotonic() + 120
+            while time.monotonic() < deadline:
+                state = request('status')
+                if state['stage'] == 'error': raise AssertionError(state['message'])
+                if state['stage'] == 'ready' and state.get('preferences') == preferences: break
+                time.sleep(.5)
+            else: raise AssertionError('runtime did not restart with changed preferences')
+        if system == 'Windows':
+            count = run('powershell.exe', '-NoProfile', '-Command', r'''@(Get-CimInstance Win32_Process -Filter "Name='e2emd.exe'" | Where-Object { $_.CommandLine -match '(^|\s)"?--grants"?(\s|$)' }).Count''')
+            assert count.strip() == '1', 'setup created a duplicate background runtime'
         request('close', {})
         assert second.wait(timeout=10) == 0
         run(binary, '--setup-headless', '--offline')
@@ -136,7 +151,7 @@ def main():
             assert 'start-runtime.ps1' in value
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps({'platform': system, 'guided_setup': True, 'model_assessment': True,
-            'autostart': True, 'reopen': True, 'retry': True, 'credentials_preserved': True, 'foreign_origin_rejected': True,
+            'autostart': True, 'preferences_restart': True, 'reopen': True, 'retry': True, 'credentials_preserved': True, 'foreign_origin_rejected': True,
             'setup_stages_observed': sorted(stages)}, indent=2) + '\n')
         print('Guided setup, verified model assessment, background startup, app enrolment and reopen passed')
     finally:
