@@ -8,6 +8,7 @@ import platform
 import plistlib
 import subprocess
 import tempfile
+from package_runtime import UPGRADE_CODE
 
 
 def run(*args):
@@ -133,8 +134,27 @@ def main():
             install(replacement, args.output.parent)
             assert installed_version() == initial_version
             assert (payload / 'models/gandalf').exists() == replacement_metadata['model_included'], 'same-version MSI retained the previous payload'
-            products = run('powershell.exe', '-NoProfile', '-Command', r'''@(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' | Where-Object { $_.DisplayName -eq 'E2EM Runtime' }).Count''').stdout.strip()
-            assert products == '1', 'same-version MSI left duplicate installed products'
+            # MSI registration can live outside HKCU's Uninstall key. Query
+            # the installer database by our stable UpgradeCode instead.
+            products = run('powershell.exe', '-NoProfile', '-Command', r'''
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+public static class E2EMInstalledProducts {
+    [System.Runtime.InteropServices.DllImport("msi.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    public static extern uint MsiEnumRelatedProductsW(string upgrade, uint reserved, uint index, System.Text.StringBuilder product);
+}
+'@
+$count = 0
+while ($true) {
+    $product = New-Object System.Text.StringBuilder 39
+    $result = [E2EMInstalledProducts]::MsiEnumRelatedProductsW('{E2EM_UPGRADE_CODE}', 0, $count, $product)
+    if ($result -eq 259) { break }
+    if ($result -ne 0 -or $count -ge 32) { throw "Cannot enumerate installed MSI products: $result" }
+    $count++
+}
+$count
+'''.replace('E2EM_UPGRADE_CODE', UPGRADE_CODE)).stdout.strip()
+            assert products == '1', f'same-version MSI registered {products} products instead of one'
             assert credential.read_bytes() == before, 'replacement changed credentials'
             assert (user_config / 'grants.json').read_bytes() == grants, 'replacement changed grants'
         install(upgrade, args.output.parent)

@@ -297,14 +297,17 @@ def build(format_name, binary, target, output, version, stage_only=False, infere
         if format_name == 'deb':
             (stage / 'DEBIAN').mkdir()
             (stage / 'DEBIAN/control').write_text(deb_control(version, deb_arch, stage))
-            command = ['dpkg-deb', '--build', '--root-owner-group', str(stage), str(artifact)]
+            # CUDA libraries make the payload several gigabytes. A moderate
+            # xz level keeps the broadly supported format with bounded build
+            # time and decompression memory.
+            command = ['dpkg-deb', '-Zxz', '-z3', '--build', '--root-owner-group', str(stage), str(artifact)]
         elif format_name == 'rpm':
             for folder in ['BUILD', 'BUILDROOT', 'RPMS', 'SOURCES', 'SPECS', 'SRPMS']:
                 (work / folder).mkdir()
             shutil.copytree(stage, work / 'SOURCES/payload')
             spec = work / 'SPECS/runtime.spec'
             spec.write_text(rpm_spec(version, rpm_arch))
-            command = ['rpmbuild', '-bb', '--define', f'_topdir {work}', str(spec)]
+            command = ['rpmbuild', '-bb', '--define', f'_topdir {work}', '--define', '_binary_payload w3.xzdio', str(spec)]
         elif format_name == 'pkg':
             component = work / 'e2em-component.pkg'
             pre_command = ['pkgbuild', '--root', str(stage), '--identifier', 'org.e2em.runtime',
