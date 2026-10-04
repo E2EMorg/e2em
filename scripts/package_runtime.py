@@ -310,7 +310,7 @@ def build(format_name, binary, target, output, version, stage_only=False, infere
             shutil.copytree(stage, work / 'SOURCES/payload')
             spec = work / 'SPECS/runtime.spec'
             spec.write_text(rpm_spec(version, rpm_arch))
-            command = ['rpmbuild', '-bb', '--define', f'_topdir {work}', '--define', '_binary_payload w3.xzdio', str(spec)]
+            command = ['rpmbuild', '-bb', '--define', f'_topdir {work}', '--define', '_binary_payload w3T4.xzdio', str(spec)]
         elif format_name == 'pkg':
             component = work / 'e2em-component.pkg'
             pre_command = ['pkgbuild', '--root', str(stage), '--identifier', 'org.e2em.runtime',
