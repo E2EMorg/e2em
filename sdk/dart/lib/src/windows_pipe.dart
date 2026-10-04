@@ -41,6 +41,9 @@ class WindowsPipe implements Transport {
       throw const E2EMError('MODEL_UNAVAILABLE');
     }
     final api = _WindowsApi();
+    // Resolve GetLastError before an operation can fail. Resolving an FFI
+    // symbol itself calls Windows APIs and can clear the thread's error state.
+    api.lastError();
     final nativeName = name.toNativeUtf16();
     final watch = Stopwatch()..start();
     try {
@@ -91,7 +94,7 @@ class WindowsPipe implements Transport {
       // GetOverlappedResult supplies the byte count for asynchronous IO,
       // including operations that completed immediately.
       pending = true;
-      while (_api.getResult(_handle, overlapped, count, 0) == 0) {
+      while (_api.pollResult(_handle, overlapped, count, 0) == 0) {
         final error = _api.lastError();
         if (error != 996) {
           diagnose('GetOverlappedResult error $error');
@@ -178,12 +181,16 @@ class _WindowsApi {
       Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>,
           Pointer<_Overlapped>),
       int Function(int, Pointer<Uint8>, int, Pointer<Uint32>,
-          Pointer<_Overlapped>)>('ReadFile');
+          Pointer<_Overlapped>)>('ReadFile', isLeaf: true);
   late final writeFile = _dll.lookupFunction<
       Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>,
           Pointer<_Overlapped>),
       int Function(int, Pointer<Uint8>, int, Pointer<Uint32>,
-          Pointer<_Overlapped>)>('WriteFile');
+          Pointer<_Overlapped>)>('WriteFile', isLeaf: true);
+  late final pollResult = _dll.lookupFunction<
+      Int32 Function(IntPtr, Pointer<_Overlapped>, Pointer<Uint32>, Int32),
+      int Function(int, Pointer<_Overlapped>, Pointer<Uint32>,
+          int)>('GetOverlappedResult', isLeaf: true);
   late final getResult = _dll.lookupFunction<
       Int32 Function(IntPtr, Pointer<_Overlapped>, Pointer<Uint32>, Int32),
       int Function(int, Pointer<_Overlapped>, Pointer<Uint32>,
@@ -193,6 +200,7 @@ class _WindowsApi {
       int Function(int, Pointer<_Overlapped>)>('CancelIoEx');
   late final close = _dll
       .lookupFunction<Int32 Function(IntPtr), int Function(int)>('CloseHandle');
-  late final lastError =
-      _dll.lookupFunction<Uint32 Function(), int Function()>('GetLastError');
+  late final lastError = _dll.lookupFunction<Uint32 Function(), int Function()>(
+      'GetLastError',
+      isLeaf: true);
 }

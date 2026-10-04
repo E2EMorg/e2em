@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--upgrade-package', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--model-source', type=Path, help='local model fixture before release URLs become public')
+    parser.add_argument('--replacement-package', type=Path, help='same-version MSI with the opposite offline payload')
     args = parser.parse_args()
     expected = {'deb': 'Linux', 'rpm': 'Linux', 'pkg': 'Darwin', 'msi': 'Windows'}[args.format]
     if platform.system() != expected:
@@ -34,6 +35,11 @@ def main():
     initial_version = json.loads(Path(str(package) + '.json').read_text(encoding="utf-8"))['version']
     offline = json.loads(Path(str(package) + '.json').read_text(encoding="utf-8"))['model_included']
     upgrade_version = json.loads(Path(str(upgrade) + '.json').read_text(encoding="utf-8"))['version']
+    replacement = args.replacement_package.resolve(strict=True) if args.replacement_package else None
+    if replacement:
+        replacement_metadata = json.loads(Path(str(replacement) + '.json').read_text(encoding='utf-8'))
+        if args.format != 'msi' or replacement_metadata['version'] != initial_version or replacement_metadata['model_included'] == offline:
+            parser.error('replacement fixture must be a same-version MSI with the opposite offline payload')
     if tuple(map(int, upgrade_version.split('.'))) <= tuple(map(int, initial_version.split('.'))):
         parser.error('upgrade fixture must have a newer package version')
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +129,14 @@ def main():
         assert json.loads((user_config / 'installation.json').read_text(encoding="utf-8"))['packaged_binary'] == str(binary)
         model_status = json.loads(run(binary, '--grants', user_config / 'grants.json', '--model-status').stdout)
         assert model_status['default'] == 'gandalf' and model_status['models'][0]['identity'].startswith('gandalf@')
+        if replacement:
+            install(replacement, args.output.parent)
+            assert installed_version() == initial_version
+            assert (payload / 'models/gandalf').exists() == replacement_metadata['model_included'], 'same-version MSI retained the previous payload'
+            products = run('powershell.exe', '-NoProfile', '-Command', r'''@(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' | Where-Object { $_.DisplayName -eq 'E2EM Runtime' }).Count''').stdout.strip()
+            assert products == '1', 'same-version MSI left duplicate installed products'
+            assert credential.read_bytes() == before, 'replacement changed credentials'
+            assert (user_config / 'grants.json').read_bytes() == grants, 'replacement changed grants'
         install(upgrade, args.output.parent)
         run(binary, '--help')
         assert installed_version() == upgrade_version, 'package version did not advance'
@@ -151,6 +165,7 @@ def main():
         'upgrade_sha256': hashlib.sha256(upgrade.read_bytes()).hexdigest(),
         'initial_version': initial_version, 'upgraded_version': upgrade_version,
         'install': True, 'upgrade': True, 'remove': True, 'credentials_preserved': True,
+        'same_version_replacement': bool(replacement),
         'package_managed_binary': True, 'user_teardown': True, 'model_provisioned': True,
         'limits': 'Package lifecycle and model provisioning; inference is qualified separately.'}, indent=2) + '\n')
     print('Native package install/upgrade/remove and credential preservation passed')

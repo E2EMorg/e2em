@@ -211,7 +211,7 @@ def wix_source(version, stage):
                       Version=version, UpgradeCode=UPGRADE_CODE, Scope='perUser',
                       InstallerVersion='500', Language='1033')
     element(package, 'MajorUpgrade', DowngradeErrorMessage='A newer E2EM Runtime is installed.',
-            Schedule='afterInstallInitialize')
+            Schedule='afterInstallInitialize', AllowSameVersionUpgrades='yes')
     element(package, 'MediaTemplate', EmbedCab='yes')
     ET.SubElement(package, f'{{{WIX_UI_NS}}}WixUI', {'Id': 'WixUI_Minimal'})
     license_file = stage / 'setup-license.rtf'

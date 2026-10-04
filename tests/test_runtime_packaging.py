@@ -94,6 +94,7 @@ class PackageTest(unittest.TestCase):
             self.assertEqual(product.get('Scope'), 'perUser')
             self.assertEqual(product.get('UpgradeCode'), package.UPGRADE_CODE)
             self.assertIsNotNone(product.find('w:MajorUpgrade', ns))
+            self.assertEqual(product.find('w:MajorUpgrade', ns).get('AllowSameVersionUpgrades'), 'yes')
             self.assertIn(str(stage / 'e2emd.exe'), [node.get('Source') for node in document.findall('.//w:File', ns)])
             self.assertEqual(document.find('.//w:RegistryValue', ns).get('Root'), 'HKCU')
             guid = document.find('.//w:Component[@Id="Payload0"]', ns).get('Guid')

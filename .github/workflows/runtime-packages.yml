@@ -173,9 +173,9 @@ jobs:
       - name: Verify native device selection and parity
         run: python scripts/check_inference_devices.py --worker dist/inference/e2em-inference.exe --library dist/inference/onnxruntime.dll --model dist/gandalf/package --output dist/reports/devices-windows.json
       - name: Native MSI lifecycle
-        run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*offline*.msi --upgrade-package dist/upgrade/*.msi --output dist/reports/msi.json
+        run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*offline*.msi --replacement-package dist/runtime/*[0-9]-x86*.msi --upgrade-package dist/upgrade/*.msi --output dist/reports/msi.json
       - name: Native normal MSI lifecycle
-        run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*[0-9]-x86*.msi --upgrade-package dist/upgrade/*.msi --model-source dist/gandalf/package --output dist/reports/msi-normal.json
+        run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*[0-9]-x86*.msi --replacement-package dist/runtime/*offline*.msi --upgrade-package dist/upgrade/*.msi --model-source dist/gandalf/package --output dist/reports/msi-normal.json
       - name: Guided Windows onboarding
         run: |
           python -c 'from pathlib import Path; import subprocess; p=next(Path("dist/runtime").glob("*offline*.msi")).resolve(); assert subprocess.run(["msiexec.exe","/i",str(p),"/qn","/norestart"]).returncode in (0,3010)'

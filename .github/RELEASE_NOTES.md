@@ -1,6 +1,6 @@
 E2EM 0.1.2 now includes guided onboarding on every desktop platform. Install the package, open **E2EM Setup** from the application menu, and choose **Set up E2EM**. The setup screen installs and verifies Gandalf, starts the background runtime, enables startup at login, and confirms a real model assessment before showing **Ready**. Progress, offline operation, update preferences and application connection are available in the same screen. Windows also offers setup from the installer's finish screen. No Python installation or terminal commands are needed.
 
-Gandalf is the default CPU model for the shared runtime, with all 40 default policies, optional conversation and custom policy strings. Normal setup downloads verified model assets; offline installers include the same weights. SDKs can select registered custom models and owner-authorized applications can install compatible model manifests from HTTPS URLs.
+Gandalf is the default local model for the shared runtime, with all 40 default policies, optional conversation and custom policy strings. Normal setup downloads verified model assets; offline installers include the same weights. SDKs can select registered custom models and owner-authorized applications can install compatible model manifests from HTTPS URLs.
 
 CPU/RAM admission checks now reject model startup before downloading or loading weights when available memory is insufficient, and cap inference at two available CPU threads. Setup reports the resource diagnostic so it can be retried after memory is freed.
 
