@@ -4,6 +4,7 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 
 import 'assessment.dart';
+import 'local.dart' show diagnose;
 import 'transport.dart';
 
 // OVERLAPPED contains a union of two DWORD offsets and a pointer.
@@ -50,7 +51,9 @@ class WindowsPipe implements Transport {
         final handle = api.createFile(
             nativeName, 0xc0000000, 0, nullptr, 3, 0x40110000, 0);
         if (handle != -1) return WindowsPipe._(api, handle);
-        if (api.lastError() != 231 || watch.elapsedMilliseconds >= 5000) {
+        final error = api.lastError();
+        if (error != 231 || watch.elapsedMilliseconds >= 5000) {
+          diagnose('CreateFileW error $error');
           throw const E2EMError('MODEL_UNAVAILABLE');
         }
         await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -79,13 +82,19 @@ class WindowsPipe implements Transport {
       final result = (writing ? _api.writeFile : _api.readFile)(
           _handle, buffer, length, count, overlapped);
       if (result == 0) {
-        if (_api.lastError() != 997) throw const E2EMError('MODEL_UNAVAILABLE');
+        final error = _api.lastError();
+        if (error != 997) {
+          diagnose('${writing ? 'WriteFile' : 'ReadFile'} error $error');
+          throw const E2EMError('MODEL_UNAVAILABLE');
+        }
       }
       // GetOverlappedResult supplies the byte count for asynchronous IO,
       // including operations that completed immediately.
       pending = true;
       while (_api.getResult(_handle, overlapped, count, 0) == 0) {
-        if (_api.lastError() != 996) {
+        final error = _api.lastError();
+        if (error != 996) {
+          diagnose('GetOverlappedResult error $error');
           pending = false;
           throw const E2EMError('MODEL_UNAVAILABLE');
         }

@@ -60,7 +60,7 @@ Set-Acl -LiteralPath $env:E2EM_DART_PRIVATE_FILE -AclObject $acl
             try:
                 subprocess.run(['dart', 'test', 'test/live.dart'],
                                cwd=ROOT / 'sdk/dart', check=True, timeout=120,
-                               env={**os.environ, 'E2EM_DART_CONFIG': str(settings)})
+                               env={**os.environ, 'E2EM_DART_CONFIG': str(settings), 'E2EM_DART_DIAGNOSTICS': '1'})
             except subprocess.CalledProcessError:
                 log.flush()
                 print((directory / 'runtime.log').read_text(encoding='utf-8', errors='replace'))

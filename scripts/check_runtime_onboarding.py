@@ -162,6 +162,12 @@ def main():
             'autostart': True, 'preferences_restart': True, 'reopen': True, 'retry': True, 'credentials_preserved': True, 'foreign_origin_rejected': True,
             'setup_stages_observed': sorted(stages)}, indent=2) + '\n')
         print('Guided setup, verified model assessment, background startup, app enrolment and reopen passed')
+    except Exception:
+        if system == 'Darwin':
+            diagnostic = subprocess.run(['launchctl', 'print', f'gui/{os.getuid()}/org.e2em.runtime'], capture_output=True, text=True)
+            print(diagnostic.stdout, diagnostic.stderr, flush=True)
+            print(subprocess.run(['ps', '-axo', 'pid,ppid,command'], capture_output=True, text=True).stdout, flush=True)
+        raise
     finally:
         for process in processes:
             if process.poll() is None:

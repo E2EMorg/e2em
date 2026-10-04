@@ -117,6 +117,8 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.version.outputs.tag }}
         run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --assets dist/release --provenance-only
+      - name: Free staged download copies before preserving the previous release
+        run: python3 -c "import shutil; shutil.rmtree('dist/downloads')"
       - uses: actions/upload-artifact@v4
         with:
           name: verified-release-bundle

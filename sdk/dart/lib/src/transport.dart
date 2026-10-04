@@ -20,7 +20,8 @@ abstract class Transport {
           InternetAddress(socketPath, type: InternetAddressType.unix), 0,
           timeout: const Duration(seconds: 5));
       return _UnixSocket(socket);
-    } catch (_) {
+    } catch (error, stack) {
+      diagnose('connect transport', error, stack);
       throw const E2EMError('MODEL_UNAVAILABLE');
     }
   }

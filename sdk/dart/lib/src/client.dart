@@ -91,6 +91,7 @@ class Client {
       String? model}) async {
     final transport = await Transport.connect(socketPath);
     final client = Client._(transport, provider, model);
+    var stage = 'server challenge';
     try {
       final clientNonce = nonce(32);
       client._send({'principal': principal, 'nonce': clientNonce});
@@ -110,6 +111,7 @@ class Client {
         'proof': _proof(
             secret, 'client', provider, principal, clientNonce, serverNonce)
       });
+      stage = 'authentication acknowledgement';
       final authenticated = await client._frame();
       if (authenticated.length != 2 ||
           authenticated['authenticated'] != true ||
@@ -120,13 +122,15 @@ class Client {
       while (client._frames.isNotEmpty) {
         client._dispatch(client._frames.removeFirst());
       }
+      stage = 'capabilities';
       final caps = await client.capabilities();
       if (caps['api_version'] != '0.1' || caps['backend_ready'] != true) {
         throw const E2EMError('MODEL_UNAVAILABLE');
       }
       client.capabilityManifest = immutable(caps) as Json;
       return client;
-    } catch (error) {
+    } catch (error, stack) {
+      diagnose(stage, error, stack);
       client.close();
       throw error is E2EMError ? error : const E2EMError('MODEL_UNAVAILABLE');
     }

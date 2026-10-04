@@ -9,6 +9,16 @@ import 'package:posix/posix.dart' as posix;
 import 'assessment.dart';
 import 'json.dart';
 
+final _diagnostics = <String>{};
+void diagnose(String stage, [Object? error, StackTrace? stack]) {
+  if (Platform.environment['E2EM_DART_DIAGNOSTICS'] == '1' &&
+      _diagnostics.add(stage)) {
+    // Stages, error types and call sites contain no credential or message data.
+    stderr.writeln('Dart transport: $stage (${error.runtimeType})');
+    if (stack != null) stderr.writeln(stack);
+  }
+}
+
 void checkDesktop() {
   if (!Platform.isLinux && !Platform.isMacOS && !Platform.isWindows) {
     throw const E2EMError('MODEL_UNAVAILABLE');
@@ -85,7 +95,8 @@ Json connection(String app, String? configPath) {
     }
     if (value['principal'] != app) throw 0;
     return value;
-  } catch (_) {
+  } catch (error, stack) {
+    diagnose('read settings', error, stack);
     throw const E2EMError('MODEL_UNAVAILABLE');
   }
 }

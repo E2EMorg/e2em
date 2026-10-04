@@ -222,21 +222,29 @@ pub(super) fn start(context: &Context, preferences: Preferences, restart: bool) 
         // the private copy can be bootstrapped without disabling the live job.
         let service = format!("{domain}/org.e2em.runtime");
         command(Command::new("launchctl").args(["enable", &service]))?;
-        if restart
-            && Command::new("launchctl")
+        let loaded = Command::new("launchctl")
+            .args(["print", &service])
+            .output()?
+            .status
+            .success();
+        if restart && loaded {
+            command(Command::new("launchctl").args(["bootout", &service]))?;
+            // bootout may return while the old job is still being removed.
+            // Do not mistake that transient job for the replacement service.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+            while Command::new("launchctl")
                 .args(["print", &service])
                 .output()?
                 .status
                 .success()
-        {
-            command(Command::new("launchctl").args(["bootout", &service]))?;
+            {
+                if std::time::Instant::now() >= deadline {
+                    return Err(io::Error::other("The previous runtime did not stop."));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
         }
-        if !Command::new("launchctl")
-            .args(["print", &service])
-            .output()?
-            .status
-            .success()
-        {
+        if restart || !loaded {
             command(
                 Command::new("launchctl")
                     .arg("bootstrap")
@@ -244,6 +252,7 @@ pub(super) fn start(context: &Context, preferences: Preferences, restart: bool) 
                     .arg(&path),
             )?;
         }
+        command(Command::new("launchctl").args(["kickstart", &service]))?;
     }
     #[cfg(windows)]
     {
