@@ -37,6 +37,10 @@ def main():
             'secret': 'a' * 64, 'provider': 'dart-test-provider'}), encoding='utf-8')
         for file in [grants, settings]:
             if os.name == 'nt':
+                # Elevated runners can assign the Administrators group as the
+                # default owner; the daemon requires the actual user's SID.
+                subprocess.run(['icacls.exe', str(file), '/setowner', f'*{sid}'],
+                               check=True, capture_output=True)
                 subprocess.run(['icacls.exe', str(file), '/inheritance:r', '/grant:r', f'*{sid}:(F)'],
                                check=True, capture_output=True)
             else:
@@ -48,6 +52,10 @@ def main():
                 subprocess.run(['dart', 'test', 'test/live.dart'],
                                cwd=ROOT / 'sdk/dart', check=True, timeout=120,
                                env={**os.environ, 'E2EM_DART_CONFIG': str(settings)})
+            except subprocess.CalledProcessError:
+                log.flush()
+                print((directory / 'runtime.log').read_text(encoding='utf-8', errors='replace'))
+                raise
             finally:
                 process.terminate()
                 try:

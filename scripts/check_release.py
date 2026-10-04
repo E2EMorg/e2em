@@ -14,6 +14,19 @@ ONBOARDING_REPORTS = (
     'onboarding-linux.json', 'onboarding-windows.json',
     'onboarding-x86_64-apple-darwin.json', 'onboarding-aarch64-apple-darwin.json',
 )
+DEVICE_REPORTS = ('devices-linux.json', 'devices-windows.json',
+                  'devices-x86_64-apple-darwin.json', 'devices-aarch64-apple-darwin.json')
+
+
+def verify_devices(directory):
+    for name in DEVICE_REPORTS:
+        report = json.loads((directory / name).read_text(encoding='utf-8'))
+        error = report.get('max_probability_error')
+        if (not isinstance(error, (int, float)) or not 0 <= error < 2e-5
+                or report['cpu']['selected_provider'] != 'CPU'
+                or not report['cpu']['executed_nodes'].get('CPUExecutionProvider')
+                or not report['auto']['executed_nodes']):
+            raise ValueError(f'native device qualification did not pass: {name}')
 
 
 def verify_onboarding(directory):
@@ -89,6 +102,7 @@ def verify_assets(directory, version):
     }
     names.extend(updates)
     names.extend(ONBOARDING_REPORTS)
+    names.extend(DEVICE_REPORTS)
     installers = names[:5] + [name.replace(f'-{version}-', f'-{version}-offline-') for name in names[:5]]
     names.extend(installers[5:])
     names.extend(['gandalf-model.json', 'gandalf-0.0.1-package.zip', 'gandalf-export-parity.json',
@@ -108,6 +122,7 @@ def verify_assets(directory, version):
         if metadata.get('native_inference') is not True or metadata.get('model_included') != ('-offline-' in name):
             raise ValueError('installer is missing its required native backend or offline model')
     verify_onboarding(directory)
+    verify_devices(directory)
     descriptor = json.loads((directory / 'gandalf-model.json').read_text(encoding="utf-8"))
     manifest = descriptor['manifest']
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey

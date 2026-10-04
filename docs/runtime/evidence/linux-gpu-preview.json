@@ -1,0 +1,44 @@
+{
+  "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.39",
+  "cpu": {
+    "cpu_threads": 2,
+    "fallback_reasons": [],
+    "probe_probability": 4.83276659562777e-05,
+    "requested_device": "cpu",
+    "selected_provider": "CPU",
+    "executed_nodes": {
+      "CPUExecutionProvider": 1745
+    }
+  },
+  "auto": {
+    "cpu_threads": 2,
+    "fallback_reasons": [],
+    "probe_probability": 4.83276659562777e-05,
+    "requested_device": "auto",
+    "selected_provider": "CUDA",
+    "executed_nodes": {
+      "CUDAExecutionProvider": 863,
+      "CPUExecutionProvider": 918
+    }
+  },
+  "accelerator_nodes_executed": 863,
+  "max_probability_error": 0.0,
+  "gpu_execution_verified": true,
+  "limits": "One fixed native scoring probe. No category-quality, throughput, full-length GPU memory or cross-platform GPU qualification.",
+  "no_visible_gpu_fallback": {
+    "cpu_threads": 2,
+    "fallback_reasons": [
+      "CUDA: DriverError(CUDA_ERROR_NO_DEVICE, \"no CUDA-capable device is detected\")",
+      "MIGraphX: not included in the installed ONNX Runtime",
+      "ROCm: not included in the installed ONNX Runtime",
+      "OpenVINO GPU: not included in the installed ONNX Runtime",
+      "WebGPU: not included in the installed ONNX Runtime"
+    ],
+    "probe_probability": 4.83276659562777e-05,
+    "requested_device": "auto",
+    "selected_provider": "CPU",
+    "executed_nodes": {
+      "CPUExecutionProvider": 1745
+    }
+  }
+}

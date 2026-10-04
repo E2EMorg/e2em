@@ -210,8 +210,11 @@ class Client {
     final prefix = ByteData(4)..setUint32(0, bytes.length);
     final frame = [...prefix.buffer.asUint8List(), ...bytes];
     _writes = _writes.then<void>((_) async {
-      if (!_closed) await _transport.write(frame);
-    }).catchError((Object _) => _fail('MODEL_UNAVAILABLE'));
+      if (!_closed) {
+        await _transport.write(frame).timeout(const Duration(seconds: 5));
+      }
+    }).catchError((Object error) => _fail(
+        error is TimeoutException ? 'DEADLINE_EXCEEDED' : 'MODEL_UNAVAILABLE'));
   }
 
   void _dispatch(Json response) {

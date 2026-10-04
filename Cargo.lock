@@ -272,6 +272,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cudarc"
+version = "0.19.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7359bf1de037ddada72729c3acec9b040f3468400c6e9e740b01ba0cd2e89562"
+dependencies = [
+ "libloading",
+]
+
+[[package]]
 name = "curve25519-dalek"
 version = "4.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -424,6 +433,7 @@ name = "e2em-inference"
 version = "0.1.2"
 dependencies = [
  "clap",
+ "cudarc",
  "e2em-runtime",
  "ort",
  "serde_json",

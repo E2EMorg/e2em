@@ -60,14 +60,16 @@ jobs:
         with:
           name: gandalf-deployment
           path: dist/gandalf
-      - run: python -m pip install onnxruntime==1.24.4
+      - name: Make room for the native CUDA libraries and installer fixtures
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+      - run: python -m pip install --no-cache-dir -r scripts/native-inference-linux.txt
       - run: python -c 'import zipfile; zipfile.ZipFile("dist/gandalf/gandalf-0.0.1-package.zip").extractall("dist/gandalf/package")'
       - run: sudo apt-get update && sudo apt-get install -y rpm musl-tools
       - run: python3 -m pip install ziglang==0.14.1
       - run: cargo install cargo-zigbuild --locked
       - run: rustup target add x86_64-unknown-linux-gnu
       - run: cargo zigbuild --locked --release -p e2em-inference --target x86_64-unknown-linux-gnu.2.28
-      - run: python3 scripts/stage_inference.py --worker target/x86_64-unknown-linux-gnu/release/e2em-inference --output dist/inference
+      - run: python3 scripts/stage_inference.py --worker target/x86_64-unknown-linux-gnu/release/e2em-inference --output dist/inference --require-provider CUDAExecutionProvider --bundle-cuda
       - run: python3 -m unittest discover -s tests -p 'test_runtime_packaging.py'
       - run: cargo build --locked --release --features runtime-service --bin e2emd --target x86_64-unknown-linux-musl
       - run: python3 scripts/package_update.py --target x86_64-unknown-linux-musl --binary target/x86_64-unknown-linux-musl/release/e2emd --output dist/runtime
@@ -85,6 +87,8 @@ jobs:
           done
       - name: Qualify native Gandalf
         run: python3 scripts/check_gandalf_runtime.py --binary target/x86_64-unknown-linux-musl/release/e2emd --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.so --package dist/gandalf/package --output dist/reports/gandalf-linux.json --reference dist/gandalf/gandalf-export-parity.json
+      - name: Verify native device selection and parity
+        run: python3 scripts/check_inference_devices.py --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.so --model dist/gandalf/package --output dist/reports/devices-linux.json
       - name: Native Debian package lifecycle
         run: |
           mkdir -p dist/reports
@@ -143,7 +147,7 @@ jobs:
         with:
           name: gandalf-deployment
           path: dist/gandalf
-      - run: python -m pip install onnxruntime==1.24.4
+      - run: python -m pip install onnxruntime-directml==1.24.4
       - run: python -c 'import zipfile; zipfile.ZipFile("dist/gandalf/gandalf-0.0.1-package.zip").extractall("dist/gandalf/package")'
       - run: dotnet tool install --global wix --version 4.0.6
       - run: wix extension add -g WixToolset.UI.wixext/4.0.6
@@ -155,7 +159,7 @@ jobs:
       - run: cargo build --locked --release -p e2em-inference --target x86_64-pc-windows-msvc
         env:
           RUSTFLAGS: '-C target-feature=+crt-static'
-      - run: python scripts/stage_inference.py --worker target/x86_64-pc-windows-msvc/release/e2em-inference.exe --output dist/inference
+      - run: python scripts/stage_inference.py --worker target/x86_64-pc-windows-msvc/release/e2em-inference.exe --output dist/inference --require-provider DmlExecutionProvider
       - name: Stage background update payload
         run: python scripts/package_update.py --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime
       - name: Build MSI and upgrade fixture
@@ -166,6 +170,8 @@ jobs:
       - run: python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --setup-binary target/x86_64-pc-windows-msvc/release/e2em-setup.exe --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
       - name: Qualify native Gandalf
         run: python scripts/check_gandalf_runtime.py --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --worker dist/inference/e2em-inference.exe --library dist/inference/onnxruntime.dll --package dist/gandalf/package --output dist/reports/gandalf-windows.json --reference dist/gandalf/gandalf-export-parity.json
+      - name: Verify native device selection and parity
+        run: python scripts/check_inference_devices.py --worker dist/inference/e2em-inference.exe --library dist/inference/onnxruntime.dll --model dist/gandalf/package --output dist/reports/devices-windows.json
       - name: Native MSI lifecycle
         run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*offline*.msi --upgrade-package dist/upgrade/*.msi --output dist/reports/msi.json
       - name: Native normal MSI lifecycle
@@ -221,7 +227,7 @@ jobs:
       - run: python3 -m unittest discover -s tests -p 'test_runtime_packaging.py'
       - run: cargo build --locked --release --features runtime-service --bin e2emd --target ${{ matrix.target }}
       - run: cargo build --locked --release -p e2em-inference --target ${{ matrix.target }}
-      - run: python3 scripts/stage_inference.py --worker target/${{ matrix.target }}/release/e2em-inference --output dist/inference
+      - run: python3 scripts/stage_inference.py --worker target/${{ matrix.target }}/release/e2em-inference --output dist/inference --require-provider CoreMLExecutionProvider
       - name: Stage background update payload
         env:
           TARGET: ${{ matrix.target }}
@@ -236,6 +242,8 @@ jobs:
       - run: python3 scripts/package_runtime.py --format pkg --target ${{ matrix.target }} --binary target/${{ matrix.target }}/release/e2emd --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
       - name: Qualify native Gandalf
         run: python3 scripts/check_gandalf_runtime.py --binary target/${{ matrix.target }}/release/e2emd --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.dylib --package dist/gandalf/package --output dist/reports/gandalf-${{ matrix.target }}.json --reference dist/gandalf/gandalf-export-parity.json
+      - name: Verify native device selection and parity
+        run: python3 scripts/check_inference_devices.py --worker dist/inference/e2em-inference --library dist/inference/libonnxruntime.dylib --model dist/gandalf/package --output dist/reports/devices-${{ matrix.target }}.json
       - name: Native PKG lifecycle
         run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*offline*.pkg --upgrade-package dist/upgrade/*.pkg --output "dist/reports/pkg-${{ matrix.target }}.json"
       - name: Native normal PKG lifecycle

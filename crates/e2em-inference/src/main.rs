@@ -1,4 +1,5 @@
-//! CPU-only native worker. All assets are provisioned before this process starts.
+//! Native worker with automatic accelerator selection and CPU fallback.
+mod accelerator;
 use clap::Parser;
 use e2em_runtime::{
     BackendError, PolicyScorer,
@@ -8,7 +9,7 @@ use e2em_runtime::{
         resources::Resources,
     },
 };
-use ort::{session::Session, value::Tensor};
+use ort::value::Tensor;
 use std::{path::PathBuf, sync::Mutex};
 use tokenizers::{Encoding, Tokenizer};
 
@@ -21,9 +22,19 @@ struct Args {
     library: PathBuf,
     #[arg(long, default_value_t = 2, value_parser = clap::value_parser!(u16).range(1..=16))]
     threads: u16,
+    /// Prefer a usable GPU, force CPU, or require GPU initialization.
+    #[arg(long, value_enum, default_value_t = accelerator::Device::Auto)]
+    device: accelerator::Device,
+    /// Load and score a fixed probe, print backend diagnostics, then exit.
+    #[arg(long)]
+    device_status: bool,
+    /// Save ONNX execution profiling for the fixed diagnostic probe.
+    #[arg(long, requires = "device_status")]
+    profile: Option<PathBuf>,
 }
 struct Scorer {
-    session: Mutex<Session>,
+    session: Mutex<Option<accelerator::Loaded>>,
+    options: accelerator::Options,
     tokenizer: Tokenizer,
     manifest: Manifest,
     metadata: Metadata,
@@ -32,6 +43,31 @@ struct Scorer {
 }
 fn failure(_: impl std::fmt::Display) -> BackendError {
     BackendError::new("local model inference failed")
+}
+fn infer(
+    loaded: &mut accelerator::Loaded,
+    rows: usize,
+    width: usize,
+    ids: &[i64],
+    masks: &[i64],
+) -> Result<Vec<f32>, BackendError> {
+    loaded.admit_batch().map_err(failure)?;
+    let outputs = loaded.session.run(ort::inputs![
+        "input_ids" => Tensor::from_array(([rows, width], ids.to_vec())).map_err(failure)?,
+        "attention_mask" => Tensor::from_array(([rows, width], masks.to_vec())).map_err(failure)?,
+    ]).map_err(failure)?;
+    let (shape, values) = outputs
+        .get("logits")
+        .ok_or_else(|| failure("missing model logits"))?
+        .try_extract_tensor::<f32>()
+        .map_err(failure)?;
+    if shape.as_ref() != [rows as i64, 1]
+        || values.len() != rows
+        || !values.iter().all(|v| v.is_finite())
+    {
+        return Err(failure("incompatible model output"));
+    }
+    Ok(values.to_vec())
 }
 fn retain(encoding: &Encoding, budget: usize, tail: usize) -> Encoding {
     let length = encoding.len();
@@ -182,21 +218,25 @@ impl PolicyScorer for Scorer {
                     masks[row * width + column] = 1;
                 }
             }
-            let outputs = session.run(ort::inputs![
-                "input_ids" => Tensor::from_array(([batch.len(), width], ids)).map_err(failure)?,
-                "attention_mask" => Tensor::from_array(([batch.len(), width], masks)).map_err(failure)?,
-            ]).map_err(failure)?;
-            let (shape, values) = outputs
-                .get("logits")
-                .ok_or_else(|| failure("missing model logits"))?
-                .try_extract_tensor::<f32>()
-                .map_err(failure)?;
-            if shape.as_ref() != [batch.len() as i64, 1]
-                || values.len() != batch.len()
-                || !values.iter().all(|v| v.is_finite())
+            let loaded = session
+                .as_mut()
+                .ok_or_else(|| failure("session unavailable"))?;
+            let result = infer(loaded, batch.len(), width, &ids, &masks);
+            let values = if result.is_err()
+                && loaded.provider != "CPU"
+                && self.options.device == accelerator::Device::Auto
             {
-                return Err(failure("incompatible model output"));
-            }
+                // Release the failed GPU session and its allocations before
+                // checking whether CPU fallback can be admitted. Retry once.
+                session.take();
+                let mut cpu = accelerator::cpu(&self.options).map_err(failure)?;
+                cpu.fallback_reasons
+                    .push("GPU execution failed; rebuilt CPU session".into());
+                *session = Some(cpu);
+                infer(session.as_mut().unwrap(), batch.len(), width, &ids, &masks)?
+            } else {
+                result?
+            };
             scores.extend(values.iter().map(|&value| {
                 let logit = f64::from(value);
                 if logit >= 0.0 {
@@ -229,10 +269,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ort::init_from(&args.library)?
         .with_name("e2em-inference")
         .commit();
-    let session = Session::builder()?
-        .with_intra_threads(plan.threads)?
-        .with_inter_threads(1)?
-        .commit_from_file(args.model.join("model.onnx"))?;
+    let options = accelerator::options(
+        &args.model,
+        descriptor.manifest.files["model.onnx"].bytes,
+        plan.threads,
+        args.device,
+        args.profile,
+    );
+    let session = accelerator::load(&options)?;
     let mut tokenizer =
         Tokenizer::from_file(args.model.join("tokenizer.json")).map_err(|_| "invalid tokenizer")?;
     let pad = tokenizer
@@ -246,13 +290,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|_| "invalid tokenizer truncation")?;
     tokenizer.with_padding(None);
     let scorer = Scorer {
-        session: Mutex::new(session),
+        session: Mutex::new(Some(session)),
+        options,
         tokenizer,
         manifest: descriptor.manifest,
         metadata,
         pad,
         coverage: Mutex::new((true, true)),
     };
+    // Registration alone cannot establish that a GPU can execute this graph.
+    // Warm up before announcing readiness so Auto can recover on CPU.
+    let probe = scorer.score_many(
+        "Thank you for your help.",
+        None,
+        &["Do not threaten to injure, kill, or otherwise harm a person.".into()],
+    )?;
+    if args.device_status {
+        let mut loaded = scorer.session.lock().map_err(failure)?;
+        let loaded = loaded.as_mut().ok_or("session unavailable")?;
+        let profile = if scorer.options.profile.is_some() {
+            Some(loaded.session.end_profiling()?)
+        } else {
+            None
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "requested_device": format!("{:?}", scorer.options.device).to_lowercase(),
+                "selected_provider": loaded.provider,
+                "fallback_reasons": loaded.fallback_reasons,
+                "cpu_threads": plan.threads,
+                "probe_probability": probe[0],
+                "profile": profile,
+            }))?
+        );
+        return Ok(());
+    }
     serve_worker(&scorer)?;
     Ok(())
 }

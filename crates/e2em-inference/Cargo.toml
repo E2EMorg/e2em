@@ -13,6 +13,9 @@ ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "
 tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
 serde_json = "1"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+cudarc = { version = "0.19.10", default-features = false, features = ["std", "driver", "dynamic-loading", "cuda-12000"] }
+
 [lints.rust]
 unsafe_code = "forbid"
 

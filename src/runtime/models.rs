@@ -659,8 +659,17 @@ fn spawn_with_resources(
         "--threads".into(),
         plan.threads.to_string().into(),
     ];
-    let scorer = NativeProcessScorer::spawn_controlled(&config.worker, &args, timeout, control)
-        .map_err(io::Error::other)?;
+    let scorer = NativeProcessScorer::spawn_with_libraries(
+        &config.worker,
+        &args,
+        timeout,
+        control,
+        config
+            .library
+            .parent()
+            .ok_or_else(|| io::Error::other("missing native library directory"))?,
+    )
+    .map_err(io::Error::other)?;
     let metadata = descriptor.manifest.metadata(path)?;
     if scorer.model_version() != metadata.model
         || scorer.tokenizer_version() != metadata.tokenizer

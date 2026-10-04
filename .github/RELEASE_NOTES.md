@@ -4,6 +4,8 @@ Gandalf is the default CPU model for the shared runtime, with all 40 default pol
 
 CPU/RAM admission checks now reject model startup before downloading or loading weights when available memory is insufficient, and cap inference at two available CPU threads. Setup reports the resource diagnostic so it can be retried after memory is freed.
 
+Native inference now prefers a usable accelerator: CUDA on Linux, DirectML on Windows, and CoreML on macOS. Installers include the platform's native provider libraries; Linux also bundles pinned CUDA dependencies and licence notices. Initialization or execution failures in automatic mode rebuild a CPU session when the CPU memory budget permits. Explicit CPU and strict GPU modes are available in the worker's device diagnostics.
+
 [Installation guide](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/INSTALL.md) · [SDK guide](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/SDK.md) · [Model format and controls](https://github.com/E2EMorg/e2em/blob/v0.1.2/docs/runtime/MODELS.md)
 
 Choose the normal installer for your platform, or its `-offline-` counterpart to include Gandalf:

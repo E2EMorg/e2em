@@ -10,11 +10,25 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from check_release import release_version, verify_assets, stage_assets, verify_onboarding, ONBOARDING_REPORTS
+from check_release import release_version, verify_assets, stage_assets, verify_onboarding, ONBOARDING_REPORTS, verify_devices, DEVICE_REPORTS
 from package_c_sdk import package
 
 
 class ReleaseTest(unittest.TestCase):
+    def test_device_parity_failure_prevents_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = {'cpu': {'selected_provider': 'CPU', 'executed_nodes': {'CPUExecutionProvider': 1}},
+                'auto': {'selected_provider': 'CPU', 'executed_nodes': {'CPUExecutionProvider': 1}},
+                'max_probability_error': 0.0}
+            for name in DEVICE_REPORTS:
+                (root / name).write_text(json.dumps(report))
+            verify_devices(root)
+            report['max_probability_error'] = .01
+            (root / DEVICE_REPORTS[-1]).write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, 'device qualification'):
+                verify_devices(root)
+
     def test_every_native_onboarding_report_must_pass(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -42,6 +56,12 @@ class ReleaseTest(unittest.TestCase):
             manifest = json.loads(target.read_text(encoding="utf-8"))
             manifest["version"] = "0.2.0"
             target.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "versions differ"):
+                release_version(root)
+            shutil.copyfile(ROOT / "sdk/node/package.json", target)
+            dart = root / "sdk/dart/pubspec.yaml"
+            dart.write_text(dart.read_text(encoding="utf-8").replace(
+                "version: " + release_version(ROOT), "version: 0.2.0"), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "versions differ"):
                 release_version(root)
 

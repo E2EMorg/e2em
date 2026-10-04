@@ -148,6 +148,36 @@ impl NativeProcessScorer {
         timeout: Duration,
         control: Option<RequestControl>,
     ) -> Result<Self, BackendError> {
+        Self::spawn_inner(executable, arguments, timeout, control, None)
+    }
+    /// Use the trusted installation's library directory for native provider dependencies.
+    pub fn spawn_with_libraries(
+        executable: &Path,
+        arguments: &[OsString],
+        timeout: Duration,
+        control: Option<RequestControl>,
+        library_directory: &Path,
+    ) -> Result<Self, BackendError> {
+        if !library_directory.is_absolute() || !library_directory.is_dir() {
+            return Err(error(
+                "native library directory must be absolute and provisioned",
+            ));
+        }
+        Self::spawn_inner(
+            executable,
+            arguments,
+            timeout,
+            control,
+            Some(library_directory),
+        )
+    }
+    fn spawn_inner(
+        executable: &Path,
+        arguments: &[OsString],
+        timeout: Duration,
+        control: Option<RequestControl>,
+        _library_directory: Option<&Path>,
+    ) -> Result<Self, BackendError> {
         if !executable.is_absolute()
             || !executable.is_file()
             || timeout.is_zero()
@@ -157,7 +187,20 @@ impl NativeProcessScorer {
                 "native worker requires an absolute provisioned executable and a positive timeout of at most thirty seconds",
             ));
         }
-        let child = Command::new(executable)
+        let mut command = Command::new(executable);
+        #[cfg(target_os = "linux")]
+        if let Some(directory) = _library_directory {
+            let mut paths = vec![directory.to_path_buf()];
+            if let Some(existing) = std::env::var_os("LD_LIBRARY_PATH") {
+                paths.extend(std::env::split_paths(&existing));
+            }
+            command.env(
+                "LD_LIBRARY_PATH",
+                std::env::join_paths(paths)
+                    .map_err(|_| error("invalid native library search path"))?,
+            );
+        }
+        let child = command
             .args(arguments)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
