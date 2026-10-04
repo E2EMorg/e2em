@@ -18,6 +18,16 @@ describe verification, idle gating, private per-user activation and rollback.
 
 Failed release gates produce no public release. Diagnose the failing job and push a fix; use a new version/tag for an already-published release. Never overwrite published assets silently. The stable latest endpoint supplies the signed default model channel.
 
+When the release owner explicitly requests replacement of the latest release,
+dispatch **Release runtime and SDKs** from the reviewed source commit with
+`release_tag` set to its existing version tag and `replace_existing=true`.
+All native checks and normal/offline package gates still run. The workflow keeps
+the previous assets, release metadata and tag in a `previous-release-backup`
+artifact before publication. It replaces the assets, verifies the published
+hashes, moves the existing tag to the built source commit and updates the release
+notes with the build provenance. An interrupted publication restores the previous
+assets and tag. `release-provenance.json` and `SHA256SUMS` identify the new build.
+
 SDK registries are intentionally not configured. Publishing to PyPI/npm/crates.io requires separate owner setup and credentials. Windows signing/macOS notarization are not configured; releases explicitly identify installers as unsigned.
 
 GitHub Actions needs `contents: write` only in the publication job. It uses the repository `GITHUB_TOKEN`; no personal release token or unrelated project credentials are needed.

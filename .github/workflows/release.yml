@@ -4,6 +4,15 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to build (must match the source version)'
+        required: true
+        type: string
+      replace_existing:
+        description: 'Replace the existing release assets and move its tag to this source commit'
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -15,12 +24,19 @@ concurrency:
 jobs:
   version:
     runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python3 scripts/check_release.py --tag "$GITHUB_REF_NAME"
+      - id: version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          python3 scripts/check_release.py --tag "$RELEASE_TAG"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
   checks:
     needs: version
@@ -83,9 +99,38 @@ jobs:
           python-version: '3.11'
       - run: python3 -m pip install cryptography
       - name: Verify installer metadata and write checksums
-        run: python3 scripts/check_release.py --tag "$GITHUB_REF_NAME" --downloads dist/downloads --assets dist/release
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: python3 scripts/check_release.py --tag "$RELEASE_TAG" --downloads dist/downloads --assets dist/release
+      - name: Record the source and qualification run
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --assets dist/release --provenance-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-release-bundle
+          path: dist/release/*
+          if-no-files-found: error
+      - name: Preserve the existing release before replacement
+        if: inputs.replace_existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: python3 scripts/publish_release.py --tag "$RELEASE_TAG" --backup dist/release-backup --backup-only
+      - uses: actions/upload-artifact@v4
+        if: inputs.replace_existing
+        with:
+          name: previous-release-backup
+          path: dist/release-backup/
+          if-no-files-found: error
       - name: Publish stable runtime and SDKs
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          REPLACE_EXISTING: ${{ inputs.replace_existing }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/release/* --verify-tag --title "E2EM ${GITHUB_REF_NAME#v}" --notes-file .github/RELEASE_NOTES.md
+          if [ "$REPLACE_EXISTING" = true ]; then
+            python3 scripts/publish_release.py --tag "$RELEASE_TAG" --assets dist/release --backup dist/release-backup --replace-existing
+          else
+            gh release create "$RELEASE_TAG" dist/release/* --verify-tag --title "E2EM ${RELEASE_TAG#v}" --notes-file .github/RELEASE_NOTES.md
+          fi

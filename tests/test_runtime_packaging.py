@@ -59,18 +59,29 @@ class PackageTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 package.verify_binary(path, 'x86_64-unknown-linux-musl')
 
-    def test_payloads_contain_only_runtime_setup_and_docs(self):
+    def test_every_payload_contains_a_user_visible_native_setup_launcher(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for platform in ['windows', 'macos', 'linux']:
                 stage = root / platform
                 binary = root / 'binary'; binary.write_bytes(b'built executable')
-                package.stage_payload(binary, platform, stage)
+                package.stage_payload(binary, platform, stage, setup_binary=binary if platform == 'windows' else None)
                 names = {p.name for p in stage.rglob('*') if p.is_file()}
                 expected = {'PACKAGING.md', 'DESKTOP.md', 'LICENSE'}
-                expected |= {'e2emd.exe', 'install_windows_runtime.ps1'} if platform == 'windows' else {'e2emd', 'install_runtime.py'}
-                if platform == 'macos': expected.add('install_macos_runtime.py')
+                expected |= {'e2emd.exe', 'e2em-setup.exe', 'install_windows_runtime.ps1'} if platform == 'windows' else {'e2emd', 'install_runtime.py'}
+                if platform == 'macos': expected |= {'install_macos_runtime.py', 'Info.plist', 'E2EM Setup'}
+                if platform == 'linux': expected |= {'org.e2em.Setup.desktop', 'e2em.svg'}
                 self.assertEqual(names, expected)
+                if platform == 'linux':
+                    self.assertIn('Exec=/usr/bin/e2emd --setup', (stage / 'usr/share/applications/org.e2em.Setup.desktop').read_text())
+                if platform == 'macos':
+                    bundle = stage / 'Applications/E2EM Setup.app/Contents'
+                    self.assertEqual(plistlib.loads((bundle / 'Info.plist').read_bytes())['CFBundleExecutable'], 'E2EM Setup')
+                    launcher = bundle / 'MacOS/E2EM Setup'
+                    self.assertTrue(launcher.stat().st_mode & 0o111)
+                    self.assertIn('e2emd --setup', launcher.read_text())
+                if platform == 'windows':
+                    self.assertEqual((stage / 'e2em-setup.exe').read_bytes(), binary.read_bytes())
 
     def test_wix_per_user_upgrade_and_escaped_sources(self):
         with tempfile.TemporaryDirectory(prefix='e2em & review ') as temporary:
@@ -82,19 +93,33 @@ class PackageTest(unittest.TestCase):
             self.assertEqual(product.get('Scope'), 'perUser')
             self.assertEqual(product.get('UpgradeCode'), package.UPGRADE_CODE)
             self.assertIsNotNone(product.find('w:MajorUpgrade', ns))
-            self.assertEqual(document.find('.//w:File', ns).get('Source'), str(stage / 'e2emd.exe'))
+            self.assertIn(str(stage / 'e2emd.exe'), [node.get('Source') for node in document.findall('.//w:File', ns)])
             self.assertEqual(document.find('.//w:RegistryValue', ns).get('Root'), 'HKCU')
-            guid = document.find('.//w:Component', ns).get('Guid')
+            guid = document.find('.//w:Component[@Id="Payload0"]', ns).get('Guid')
             self.assertNotEqual(guid, '*')
             changed_version = ET.fromstring(package.wix_source('1.2.4', stage))
-            self.assertEqual(changed_version.find('.//w:Component', ns).get('Guid'), guid)
-            self.assertIsNone(document.find('.//w:CustomAction', ns))
+            self.assertEqual(changed_version.find('.//w:Component[@Id="Payload0"]', ns).get('Guid'), guid)
+            self.assertEqual(document.find('.//w:Shortcut', ns).get('Name'), 'E2EM Setup')
+            self.assertIsNotNone(document.find('.//w:CustomAction[@Id="LaunchSetup"]', ns))
+            self.assertIsNone(document.find('.//w:InstallExecuteSequence', ns))
+            publish = document.find('.//w:Publish', ns)
+            self.assertIn('NOT Installed', publish.get('Condition'))
+            self.assertEqual(publish.get('Dialog'), 'ExitDialog')
+
+    def test_guided_setup_does_not_require_a_python_installation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            control = package.deb_control('1.2.3', 'amd64', Path(temporary))
+            depends = next(line for line in control.splitlines() if line.startswith('Depends:'))
+            self.assertNotIn('python', depends)
+            spec = package.rpm_spec('1.2.3', 'x86_64')
+            self.assertNotIn('Requires: python', spec)
+            self.assertIn('/usr/share/applications/org.e2em.Setup.desktop', spec)
 
     def test_stage_only_never_claims_package_or_checksum(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); binary = root / 'binary'
             executable(binary, 'x86_64-pc-windows-msvc')
-            staged = package.build('msi', binary, 'x86_64-pc-windows-msvc', root / 'out', '1.2.3', True)
+            staged = package.build('msi', binary, 'x86_64-pc-windows-msvc', root / 'out', '1.2.3', True, setup_binary=binary)
             self.assertTrue(staged.is_dir())
             self.assertFalse(list((root / 'out').glob('*.msi')))
             self.assertFalse(list((root / 'out').glob('*.sha256')))
@@ -102,11 +127,20 @@ class PackageTest(unittest.TestCase):
             for source in document.findall('.//{'+package.WIX_NS+'}File'):
                 self.assertTrue(Path(source.get('Source')).is_file())
             with self.assertRaises(ValueError):
-                package.build('msi', binary, 'x86_64-pc-windows-msvc', root / 'out', '1.2.3', True)
+                package.build('msi', binary, 'x86_64-pc-windows-msvc', root / 'out', '1.2.3', True, setup_binary=binary)
 
     def test_format_must_match_target(self):
         with self.assertRaises(ValueError):
             package.build('msi', Path('missing'), 'x86_64-unknown-linux-musl', Path('out'), '1.0.0')
+
+    def test_macos_installer_explains_the_native_setup_handoff(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); binary = root / 'binary'
+            executable(binary, 'aarch64-apple-darwin')
+            staged = package.build('pkg', binary, 'aarch64-apple-darwin', root / 'out', '1.2.3', True)
+            distribution = ET.parse(staged / 'distribution.xml')
+            self.assertEqual(distribution.find('conclusion').get('file'), 'conclusion.html')
+            self.assertIn('Applications → E2EM Setup', (staged / 'resources/conclusion.html').read_text())
 
 
 @unittest.skipUnless(os.name == 'posix', 'Unix setup tools require POSIX ownership')

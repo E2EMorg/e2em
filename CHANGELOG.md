@@ -11,6 +11,8 @@
 
 ## Unreleased
 
+- Add the same native guided setup screen on Linux, macOS and Windows, with menu launchers, model provisioning, background startup, login/update preferences, app enrolment and an authenticated model assessment before reporting Ready. Python is no longer required for runtime onboarding.
+- Resume interrupted setup and preserve existing app credentials; include guided onboarding checks in native package CI.
 - Add idle background runtime updates, verified host payloads, release channels, status controls and bounded retries.
 - Supervise per-user update activation with readiness probation, retained previous versions and automatic rollback; preserve package-owned files and grants.
 - Enable updates in managed user setup, with opt-out, managed cleanup and offline lifecycle tests.

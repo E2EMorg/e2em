@@ -9,7 +9,7 @@ import secrets
 import shutil
 import uuid
 
-from install_runtime import atomic_json, private_dir, remove_updates
+from install_runtime import atomic_json, private_dir, remove_updates, remove_onboarding
 from setup_models import arguments as model_arguments, provision, remove_models
 
 LABEL = "org.e2em.runtime"
@@ -93,6 +93,7 @@ def main(argv=None):
         # normally removes them, and a live agent must never lose its grants.
         if socket.exists() or socket.is_symlink():
             raise ValueError("stop the agent and remove its stale socket before uninstalling")
+        remove_onboarding(config)
         apps = config / "apps"
         if apps.exists():
             private_dir(apps)
@@ -101,6 +102,7 @@ def main(argv=None):
             if not any(apps.iterdir()):
                 apps.rmdir()
         managed = [agent, config / "grants.json", config / "installation.json"]
+        if (config / 'onboarding.json').exists(): managed.append(config / 'onboarding.json')
         if "packaged_binary" not in marker:
             managed.append(binary)
         for path in managed:

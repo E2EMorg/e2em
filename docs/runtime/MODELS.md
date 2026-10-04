@@ -14,7 +14,8 @@ The default deployment descriptor is Ed25519 signed with the public key in `src/
 
 Enabled model updates check the latest stable E2EM release's `gandalf-model.json` every six hours, after at least 60 seconds without requests. They accept only a newer semantic model version with a valid release signature. Model updates do not require a daemon version change. Raw Hugging Face training checkpoints are converted, compared and signed by the release pipeline before they become runtime updates; the runtime never runs downloaded repository code. Custom sources update only when the owner opts in.
 
-`--offline` disables all network access, including daemon and model updates. Setup accepts `--offline` (Windows `-Offline`). Choosing an offline installer alone still permits future verified updates when online. `--no-auto-update` / `-NoAutoUpdate` pins both updates during setup.
+`--offline` disables all network access, including daemon and model updates. Guided setup has an **Offline installation** option; unattended setup accepts
+`--setup-headless --offline`. Legacy scripts accept `--offline` (Windows `-Offline`). Choosing an offline installer alone still permits future verified updates when online. `--no-auto-update` / `-NoAutoUpdate` pins both updates during setup.
 
 Inspect, explicitly check, select or roll back a model:
 
@@ -25,7 +26,8 @@ e2emd --grants ~/.config/e2em/grants.json --model-use custom
 e2emd --grants ~/.config/e2em/grants.json --model-rollback gandalf
 ```
 
-Rollback disables automatic updates for that alias. Reinstall with automatic updates enabled to resume. If initial setup is interrupted, retain the private store and rerun `e2emd --grants PATH --model-install gandalf`; completed downloads are reused. Start the installed service only after this command succeeds. For an offline retry supply the local package directory instead.
+Rollback disables automatic updates for that alias. Reinstall with automatic updates enabled to resume. If guided setup is interrupted, reopen **E2EM Setup** and choose **Try again**.
+For legacy command-line setup, retain the private store and rerun `e2emd --grants PATH --model-install gandalf`; completed downloads are reused. Start the installed service only after this command succeeds. For an offline retry supply the local package directory instead.
 
 ## Custom models and SDKs
 

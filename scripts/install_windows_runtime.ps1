@@ -156,8 +156,26 @@ if ($Action -eq 'uninstall') {
     }
     foreach ($File in @(Get-ChildItem -LiteralPath $Root -Filter 'app-*.json')) { Remove-Item -LiteralPath $File.FullName }
     $Managed = @($GrantsPath, $Marker)
+    foreach ($Name in @('onboarding.json','start-runtime.ps1')) {
+        $Path = Join-Path $Root $Name
+        if (Test-Path -LiteralPath $Path) { $Managed += $Path }
+    }
+    $StartupKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $StartupValue = Get-ItemProperty -LiteralPath $StartupKey -Name 'E2EM Runtime' -ErrorAction SilentlyContinue
+    if ($StartupValue -and $StartupValue.'E2EM Runtime'.Contains((Join-Path $Root 'start-runtime.ps1'))) {
+        Remove-ItemProperty -LiteralPath $StartupKey -Name 'E2EM Runtime'
+    }
     if (-not $Packaged) { $Managed += $Executable }
     foreach ($Path in $Managed) { Remove-Item -LiteralPath $Path }
+    $Setup = Join-Path $Root 'setup'
+    if (Test-Path -LiteralPath $Setup) {
+        Assert-PrivatePath $Setup $true $true
+        foreach ($Name in @('session.json','session.lock')) {
+            $Path = Join-Path $Setup $Name
+            if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path }
+        }
+        if (-not (Get-ChildItem -LiteralPath $Setup -Force)) { Remove-Item -LiteralPath $Setup }
+    }
     $Models = Join-Path $Root 'models'
     if (Test-Path -LiteralPath $Models) {
         Assert-PrivatePath $Models $true $true

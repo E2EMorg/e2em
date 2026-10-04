@@ -10,6 +10,20 @@ from package_runtime import verify_binary
 from package_update import UPDATE_TARGETS
 
 ROOT = Path(__file__).resolve().parents[1]
+ONBOARDING_REPORTS = (
+    'onboarding-linux.json', 'onboarding-windows.json',
+    'onboarding-x86_64-apple-darwin.json', 'onboarding-aarch64-apple-darwin.json',
+)
+
+
+def verify_onboarding(directory):
+    for name in ONBOARDING_REPORTS:
+        report = json.loads((directory / name).read_text(encoding='utf-8'))
+        if not all(report.get(check) is True for check in (
+            'guided_setup', 'model_assessment', 'autostart', 'reopen', 'retry',
+            'credentials_preserved', 'foreign_origin_rejected',
+        )):
+            raise ValueError(f'guided onboarding qualification did not pass: {name}')
 
 
 def release_version(root=ROOT):
@@ -69,6 +83,7 @@ def verify_assets(directory, version):
         for target in UPDATE_TARGETS
     }
     names.extend(updates)
+    names.extend(ONBOARDING_REPORTS)
     installers = names[:5] + [name.replace(f'-{version}-', f'-{version}-offline-') for name in names[:5]]
     names.extend(installers[5:])
     names.extend(['gandalf-model.json', 'gandalf-0.0.1-package.zip', 'gandalf-export-parity.json',
@@ -87,6 +102,7 @@ def verify_assets(directory, version):
             raise ValueError("installer metadata must truthfully report unsigned artifacts")
         if metadata.get('native_inference') is not True or metadata.get('model_included') != ('-offline-' in name):
             raise ValueError('installer is missing its required native backend or offline model')
+    verify_onboarding(directory)
     descriptor = json.loads((directory / 'gandalf-model.json').read_text(encoding="utf-8"))
     manifest = descriptor['manifest']
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey

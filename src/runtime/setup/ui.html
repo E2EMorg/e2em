@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>E2EM Setup</title><link rel="stylesheet" href="style.css">
+<main>
+  <div class="brand">E2EM <span>PRIVATE BY DEFAULT</span></div>
+  <h1>Private messages.<br>Ready in a few minutes.</h1>
+  <p class="intro">E2EM runs on this computer. Set it up once, then connect the apps you want to use it with.</p>
+  <section aria-labelledby="status-title">
+    <div class="status-heading"><span id="indicator"></span><h2 id="status-title">Welcome</h2></div>
+    <p id="message" role="status" aria-live="polite">Preparing setup…</p>
+    <ol id="steps"><li data-step="configuring">Prepare your private runtime</li><li data-step="model">Install and verify Gandalf</li><li data-step="starting">Start E2EM</li><li data-step="checking">Check that everything works</li></ol>
+  </section>
+  <form id="setup-form">
+    <label><input id="login" type="checkbox" checked> Start E2EM when I sign in</label>
+    <label><input id="updates" type="checkbox" checked> Keep E2EM and its model up to date</label>
+    <details><summary>Offline installation</summary><label><input id="offline" type="checkbox"> Use bundled assets and disable network updates</label><p>Requires an offline installer or a model already installed on this computer.</p></details>
+    <p class="note">Setup downloads the model when it isn’t bundled. Your messages stay on this computer.</p>
+    <button id="start" type="submit">Set up E2EM</button>
+  </form>
+  <section id="connect" hidden>
+    <h2>Connect an application</h2><p>Your runtime is ready. Enter the name supplied by the app you want to connect. Each app gets its own private access.</p>
+    <form id="app-form"><label for="principal">Application name</label><div class="app-fields"><input id="principal" value="my-app" required maxlength="64" pattern="[A-Za-z0-9_-]+" autocomplete="off"><button type="submit">Connect app</button></div></form>
+    <p id="app-message" role="status" aria-live="polite"></p>
+    <button id="done" class="secondary" type="button">Done</button>
+  </section>
+  <footer>LOCAL PROCESSING · NO ACCOUNT REQUIRED · NO MESSAGE TELEMETRY</footer>
+</main><script src="app.js" defer></script></html>

@@ -250,6 +250,14 @@ impl Manager {
     /// Migrate an existing user installation on its first start after upgrade.
     /// Backend paths come only from the installed executable/owner setup marker.
     pub fn ensure_default(&self, offline: bool, auto_update: bool) -> io::Result<()> {
+        self.ensure_default_progress(offline, auto_update, &|_, _| {})
+    }
+    pub fn ensure_default_progress(
+        &self,
+        offline: bool,
+        auto_update: bool,
+        progress: &dyn Fn(u64, u64),
+    ) -> io::Result<()> {
         if !self.path.exists() {
             let parent = self
                 .path
@@ -323,7 +331,7 @@ impl Manager {
             "gandalf".into()
         };
         eprintln!("Provisioning verified Gandalf assets before runtime startup.");
-        self.install(&source, "gandalf", auto_update && !offline)?;
+        self.install_progress(&source, "gandalf", auto_update && !offline, progress)?;
         Ok(())
     }
     pub fn config(&self) -> io::Result<Config> {
@@ -361,7 +369,16 @@ impl Manager {
         Ok(config)
     }
     pub fn install(&self, source: &str, alias: &str, auto_update: bool) -> io::Result<Manifest> {
-        self.install_with(source, alias, auto_update, false, &|| Ok(()))
+        self.install_progress(source, alias, auto_update, &|_, _| {})
+    }
+    pub fn install_progress(
+        &self,
+        source: &str,
+        alias: &str,
+        auto_update: bool,
+        progress: &dyn Fn(u64, u64),
+    ) -> io::Result<Manifest> {
+        self.install_with(source, alias, auto_update, false, &|| Ok(()), progress)
     }
     fn install_with(
         &self,
@@ -370,6 +387,7 @@ impl Manager {
         auto_update: bool,
         update: bool,
         admission: &dyn Fn() -> io::Result<()>,
+        progress: &dyn Fn(u64, u64),
     ) -> io::Result<Manifest> {
         if !model::name(alias) {
             return Err(io::Error::other("invalid model alias"));
@@ -383,6 +401,14 @@ impl Manager {
         let (candidate, local) = descriptor(source, update)?;
         let trusted = alias == "gandalf";
         verify_descriptor(&candidate, trusted)?;
+        let total = candidate
+            .manifest
+            .files
+            .values()
+            .map(|asset| asset.bytes)
+            .sum();
+        let mut completed = 0;
+        progress(0, total);
         if update && let Some(old) = config.models.get(alias) {
             let previous: Descriptor = read(&old.current.join("model.json"))?;
             if semver::Version::parse(&candidate.manifest.version).map_err(io::Error::other)?
@@ -411,6 +437,8 @@ impl Manager {
                     && model::digest(&final_path)? == asset.sha256
                     && final_path.metadata()?.len() == asset.bytes
                 {
+                    completed += asset.bytes;
+                    progress(completed, total);
                     continue;
                 }
                 let part = stage.join(format!("{name}.part"));
@@ -460,6 +488,7 @@ impl Manager {
                 use std::io::{Seek, SeekFrom};
                 output.seek(SeekFrom::End(0))?;
                 let mut size = output.metadata()?.len();
+                progress(completed + size, total);
                 let mut buffer = [0; 65536];
                 loop {
                     admission()?;
@@ -472,6 +501,7 @@ impl Manager {
                         return Err(io::Error::other("model asset exceeds descriptor size"));
                     }
                     output.write_all(&buffer[..count])?;
+                    progress(completed + size, total);
                 }
                 output.sync_all()?;
                 if size != asset.bytes || model::digest(&part)? != asset.sha256 {
@@ -481,6 +511,7 @@ impl Manager {
                 }
                 drop(output);
                 fs::rename(part, final_path)?;
+                completed += asset.bytes;
             }
             write(&stage.join("model.json"), &candidate)?;
             candidate.manifest.verify(&stage)?;
@@ -503,6 +534,7 @@ impl Manager {
             fs::rename(&stage, &destination)?;
         }
         candidate.manifest.verify(&destination)?;
+        progress(total, total);
         let previous = config.models.get(alias).and_then(|old| {
             if old.current == destination {
                 old.previous.clone()
@@ -537,6 +569,17 @@ impl Manager {
         config.default = alias.into();
         write(&self.path, &config)
     }
+    /// Apply setup's update preference without reinstalling the default model.
+    pub fn set_default_auto_update(&self, enabled: bool) -> io::Result<()> {
+        let _lock = self.lock()?;
+        let mut config = self.config()?;
+        let installed = config
+            .models
+            .get_mut(&config.default)
+            .ok_or_else(|| io::Error::other("default model is not installed"))?;
+        installed.auto_update = enabled;
+        write(&self.path, &config)
+    }
     pub fn rollback(&self, alias: &str) -> io::Result<()> {
         let _lock = self.lock()?;
         let mut config = self.config()?;
@@ -564,7 +607,7 @@ impl Manager {
             if installed.auto_update
                 && (force || super::update::now().saturating_sub(installed.last_check) >= 21600)
             {
-                self.install_with(&installed.source, &alias, true, true, admission)?;
+                self.install_with(&installed.source, &alias, true, true, admission, &|_, _| {})?;
             }
         }
         Ok(())

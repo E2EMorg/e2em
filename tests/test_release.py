@@ -10,11 +10,24 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from check_release import release_version, verify_assets, stage_assets
+from check_release import release_version, verify_assets, stage_assets, verify_onboarding, ONBOARDING_REPORTS
 from package_c_sdk import package
 
 
 class ReleaseTest(unittest.TestCase):
+    def test_every_native_onboarding_report_must_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = {key: True for key in ('guided_setup', 'model_assessment', 'autostart',
+                'reopen', 'retry', 'credentials_preserved', 'foreign_origin_rejected')}
+            for name in ONBOARDING_REPORTS:
+                (root / name).write_text(json.dumps(report))
+            verify_onboarding(root)
+            report['retry'] = False
+            (root / ONBOARDING_REPORTS[-1]).write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, 'onboarding qualification'):
+                verify_onboarding(root)
+
     def test_sdk_version_drift_prevents_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -24,6 +24,11 @@ path = "src/bin/e2emd.rs"
 required-features = ["runtime-service"]
 
 [[bin]]
+name = "e2em-setup"
+path = "src/bin/e2em-setup.rs"
+required-features = ["runtime-service"]
+
+[[bin]]
 name = "e2em-resource-worker"
 path = "src/bin/e2em-resource-worker.rs"
 required-features = ["runtime-probes"]

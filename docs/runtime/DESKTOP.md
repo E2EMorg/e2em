@@ -11,13 +11,14 @@ assessment with reports for all named categories. Its bundled backend evaluates
 `pii.email`; other checks are reported as unevaluated, without Python workers or
 model downloads.
 
-MSI, PKG, DEB and RPM build/lifecycle workflows are described in
-[PACKAGING.md](PACKAGING.md). Packages install the executable and user setup tools;
-enrolment/startup remain explicit. Use `--use-packaged-binary` on Unix or
-`-UsePackagedBinary` on Windows so user setup references the package-owned
-executable and upgrades preserve credentials. Existing source-copy installs keep
-their previous behavior. Release artifacts are unsigned developer previews; consult each release's attached
-native reports and workflow results for platform qualification.
+MSI, PKG, DEB and RPM packages provide **E2EM Setup** in the native applications
+menu. The same native screen provisions Gandalf, starts the runtime in the
+background, enables login startup and updates by default, and checks a local
+assessment before showing Ready. See [installation](../INSTALL.md) and
+[packaging](PACKAGING.md). The commands below are optional developer/source-copy
+workflows. Existing source-copy installs keep their behavior; packaged users
+need no Python or terminal commands for onboarding. Artifacts remain unsigned;
+consult each release's native reports for platform qualification.
 
 Install explicitly (no administrator permission):
 

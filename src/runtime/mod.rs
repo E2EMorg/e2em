@@ -11,6 +11,8 @@ pub mod scheduler;
 #[cfg(feature = "runtime-service")]
 pub mod service;
 #[cfg(feature = "runtime-service")]
+pub mod setup;
+#[cfg(feature = "runtime-service")]
 pub mod update;
 
 use crate::{PolicyScorer, RulesScorer};

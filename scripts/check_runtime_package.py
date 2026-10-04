@@ -70,6 +70,11 @@ def main():
             for path in sorted([p for p in payload.rglob('*') if p.is_dir()] + [p for p in binary.parent.rglob('*') if p.is_dir()], key=lambda p: len(p.parts), reverse=True):
                 run('sudo', 'rmdir', path)
             run('sudo', 'rmdir', payload, binary.parent)
+            # This app bundle is wholly owned by this package.
+            bundle = Path('/Applications/E2EM Setup.app')
+            for path in sorted(bundle.rglob('*'), key=lambda p: len(p.parts), reverse=True):
+                run('sudo', 'rmdir' if path.is_dir() else 'rm', *([] if path.is_dir() else ['-f']), path)
+            run('sudo', 'rmdir', bundle)
             run('sudo', 'pkgutil', '--forget', 'org.e2em.runtime')
         elif args.format == 'deb':
             run('dpkg', '-r', 'e2em-runtime')

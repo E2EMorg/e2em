@@ -98,6 +98,17 @@ jobs:
       - name: Native normal Fedora lifecycle
         run: |
           docker run --rm -v "$PWD:/work:ro" -v "$PWD/dist/reports:/reports" fedora:43 bash -lc 'dnf install -y python3 rpm && python3 /work/scripts/check_runtime_package.py --format rpm --package /work/dist/runtime/*[0-9]-x86*.rpm --upgrade-package /work/dist/upgrade/*.rpm --model-source /work/dist/gandalf/package --output /reports/rpm-normal.json'
+      - name: Guided Linux onboarding
+        # Also exercise the installed UI against an actual user service; the
+        # container lifecycle jobs above deliberately have no desktop session.
+        run: |
+          sudo loginctl enable-linger "$USER"
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          sudo systemctl start "user@$(id -u).service"
+          sudo dpkg -i dist/runtime/*offline*.deb
+          python3 scripts/check_runtime_onboarding.py --binary /usr/bin/e2emd --output dist/reports/onboarding-linux.json --disposable-host
+          sudo dpkg -r e2em-runtime
       - name: Build native C SDK
         run: |
           cargo build --locked --release -p e2em-ffi
@@ -135,9 +146,10 @@ jobs:
       - run: python -m pip install onnxruntime==1.24.4
       - run: python -c 'import zipfile; zipfile.ZipFile("dist/gandalf/gandalf-0.0.1-package.zip").extractall("dist/gandalf/package")'
       - run: dotnet tool install --global wix --version 4.0.6
+      - run: wix extension add -g WixToolset.UI.wixext/4.0.6
       - run: wix --version
       - run: python -m unittest discover -s tests -p 'test_runtime_packaging.py'
-      - run: cargo build --locked --release --features runtime-service --bin e2emd --target x86_64-pc-windows-msvc
+      - run: cargo build --locked --release --features runtime-service --bin e2emd --bin e2em-setup --target x86_64-pc-windows-msvc
         env:
           RUSTFLAGS: '-C target-feature=+crt-static'
       - run: cargo build --locked --release -p e2em-inference --target x86_64-pc-windows-msvc
@@ -149,15 +161,20 @@ jobs:
       - name: Build MSI and upgrade fixture
         run: |
           UPGRADE_VERSION=$(python -c 'import tomllib; v=tomllib.load(open("Cargo.toml","rb"))["package"]["version"].split("."); v[2]=str(int(v[2])+1); print(".".join(v))')
-          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime --inference-dir dist/inference
-          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/upgrade --version "$UPGRADE_VERSION" --inference-dir dist/inference
-      - run: python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
+          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --setup-binary target/x86_64-pc-windows-msvc/release/e2em-setup.exe --output dist/runtime --inference-dir dist/inference
+          python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --setup-binary target/x86_64-pc-windows-msvc/release/e2em-setup.exe --output dist/upgrade --version "$UPGRADE_VERSION" --inference-dir dist/inference
+      - run: python scripts/package_runtime.py --format msi --target x86_64-pc-windows-msvc --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --setup-binary target/x86_64-pc-windows-msvc/release/e2em-setup.exe --output dist/runtime --inference-dir dist/inference --offline --model-package dist/gandalf/package
       - name: Qualify native Gandalf
         run: python scripts/check_gandalf_runtime.py --binary target/x86_64-pc-windows-msvc/release/e2emd.exe --worker dist/inference/e2em-inference.exe --library dist/inference/onnxruntime.dll --package dist/gandalf/package --output dist/reports/gandalf-windows.json --reference dist/gandalf/gandalf-export-parity.json
       - name: Native MSI lifecycle
         run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*offline*.msi --upgrade-package dist/upgrade/*.msi --output dist/reports/msi.json
       - name: Native normal MSI lifecycle
         run: python scripts/check_runtime_package.py --format msi --package dist/runtime/*[0-9]-x86*.msi --upgrade-package dist/upgrade/*.msi --model-source dist/gandalf/package --output dist/reports/msi-normal.json
+      - name: Guided Windows onboarding
+        run: |
+          python -c 'from pathlib import Path; import subprocess; p=next(Path("dist/runtime").glob("*offline*.msi")).resolve(); assert subprocess.run(["msiexec.exe","/i",str(p),"/qn","/norestart"]).returncode in (0,3010)'
+          python scripts/check_runtime_onboarding.py --binary "$LOCALAPPDATA/E2EM Runtime/e2emd.exe" --output dist/reports/onboarding-windows.json --disposable-host
+          python -c 'from pathlib import Path; import subprocess; p=next(Path("dist/runtime").glob("*offline*.msi")).resolve(); assert subprocess.run(["msiexec.exe","/x",str(p),"/qn","/norestart"]).returncode in (0,3010)'
       - name: Build native C SDK
         run: |
           cargo build --locked --release -p e2em-ffi --target x86_64-pc-windows-msvc
@@ -223,6 +240,10 @@ jobs:
         run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*offline*.pkg --upgrade-package dist/upgrade/*.pkg --output "dist/reports/pkg-${{ matrix.target }}.json"
       - name: Native normal PKG lifecycle
         run: python3 scripts/check_runtime_package.py --format pkg --package dist/runtime/*[0-9]-${{ matrix.target }}.pkg --upgrade-package dist/upgrade/*.pkg --model-source dist/gandalf/package --output "dist/reports/pkg-normal-${{ matrix.target }}.json"
+      - name: Guided macOS onboarding
+        run: |
+          sudo installer -pkg dist/runtime/*offline*.pkg -target /
+          python3 scripts/check_runtime_onboarding.py --binary /usr/local/libexec/e2em/e2emd --output dist/reports/onboarding-${{ matrix.target }}.json --disposable-host
       - name: Build native C SDK
         env:
           TARGET: ${{ matrix.target }}

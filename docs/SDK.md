@@ -6,6 +6,17 @@ Send a message and get a report. All built-in presets are selected automatically
 
 The service uses Gandalf by default and includes all 40 presets. It scores custom text and supports registered custom model selection through `model` options. [Normal/offline provisioning and model format](runtime/MODELS.md).
 
+For first-run app onboarding, open the installed runtime with
+`e2emd --setup --setup-app YOUR_APP_NAME`. This opens the same setup screen on
+every desktop platform and pre-fills the application's name. The user sets up
+the model if needed and approves **Connect app**, then returns to your app.
+Connect again using the SDK's `app` option; the resulting private credentials
+are loaded automatically. App enrolment always needs that explicit approval;
+opening the screen alone grants no access. Use the installed executable path
+from the [installation guide](INSTALL.md) on macOS/Windows.
+On Windows, integrations can use the console-free launcher
+`e2em-setup.exe --setup-app YOUR_APP_NAME` beside the installed daemon.
+
 ## Python
 
 Install the SDK from a checkout or a downloaded release package:

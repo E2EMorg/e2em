@@ -55,7 +55,23 @@ def remove_updates(config):
     if not any(updates.iterdir()):
         updates.rmdir()
 
+def remove_onboarding(config):
+    setup = config / 'setup'
+    if not setup.exists() and not setup.is_symlink(): return
+    private_dir(setup)
+    import fcntl
+    lock = setup / 'session.lock'
+    if lock.is_symlink(): raise ValueError('invalid setup lock')
+    if lock.exists():
+        with lock.open('r') as handle:
+            try: fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError: raise ValueError('close E2EM Setup before uninstalling') from None
+            for name in ('session.json', 'session.lock'):
+                (setup / name).unlink(missing_ok=True)
+    if not any(setup.iterdir()): setup.rmdir()
+
 def main(argv=None):
+    """Legacy command-line setup; packaged users normally use e2emd --setup."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home",type=Path,default=Path.home())
     sub = parser.add_subparsers(dest="command",required=True)
@@ -107,11 +123,13 @@ def main(argv=None):
     if marker != {"version":1} and not packaged_marker:
         raise ValueError("unmanaged installation")
     if args.command == "uninstall":
+        remove_onboarding(config)
         # The owner stops the unit first. Delete only managed files, not arbitrary app data.
         if (config / "apps").exists():
             for path in (config / "apps").glob("*.json"): path.unlink()
             (config / "apps").rmdir()
         managed = [unit,config / "grants.json",config / "installation.json"]
+        if (config / 'onboarding.json').exists(): managed.append(config / 'onboarding.json')
         if "packaged_binary" not in marker: managed.append(binary)
         for path in managed: path.unlink()
         remove_updates(config)

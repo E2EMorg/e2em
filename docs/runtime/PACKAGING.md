@@ -3,39 +3,34 @@
 The build produces `e2em-runtime-VERSION-TARGET.{msi,pkg,deb,rpm}` plus SHA-256
 checksums and JSON metadata. Version comes from `Cargo.toml`. These are unsigned
 release artifacts. Normal installers include the native inference worker and CPU ONNX Runtime. Offline variants (`e2em-runtime-VERSION-offline-TARGET`) also include verified Gandalf assets. No grants or credentials are included. Runtime inference needs no Python;
-Unix user setup requires Python 3.11+. No package script starts a root service or
-enrols applications automatically.
+Python is only required for optional legacy setup scripts. No package script starts
+a root service or enrols applications automatically.
 
 ## Package ownership and per-user setup
 
-Linux DEB/RPM installs `/usr/bin/e2emd` and setup/docs in `/usr/share/e2em`.
-After package installation, run as your normal user:
+Linux DEB/RPM installs `/usr/bin/e2emd`, setup/docs in `/usr/share/e2em`, and
+**E2EM Setup** in the applications menu. It starts the systemd user service.
+macOS PKG installs `/usr/local/libexec/e2em/e2emd`, setup/docs in
+`/usr/local/share/e2em`, and `/Applications/E2EM Setup.app`. Its finish screen
+directs users to that app; setup registers a LaunchAgent. Windows MSI installs
+under `%LOCALAPPDATA%\E2EM Runtime`, creates a Start menu **E2EM Setup** shortcut,
+and offers to open setup when installation finishes. Quiet MSI installs do not
+launch setup. Windows setup starts a hidden background process and registers an
+HKCU login entry, without administrator rights or a foreground console.
 
-```sh
-python3 /usr/share/e2em/install_runtime.py install --binary /usr/bin/e2emd --use-packaged-binary
-python3 /usr/share/e2em/install_runtime.py enrol my-app
-systemctl --user daemon-reload
-systemctl --user enable --now e2emd
-```
+On every platform, open **E2EM Setup** and choose **Set up E2EM**. The same native
+screen downloads/imports verified Gandalf, configures background startup, and
+performs an authenticated local model assessment before reporting **Ready**.
+Startup at login and updates can be disabled during setup. App enrolment is on
+the Ready screen and writes credentials privately, never returning their contents
+to the browser. Interrupted setup resumes without changing provider identity or
+existing app credentials. No Python installation or terminal commands are needed.
 
-macOS PKG installs `/usr/local/libexec/e2em/e2emd` and setup/docs in
-`/usr/local/share/e2em`. In your GUI login session, with Python 3.11+ installed:
-
-```sh
-python3 /usr/local/share/e2em/install_macos_runtime.py install --binary /usr/local/libexec/e2em/e2emd --use-packaged-binary
-python3 /usr/local/share/e2em/install_macos_runtime.py enrol my-app
-launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/org.e2em.runtime.plist"
-```
-
-Windows MSI is per-user and installs under `%LOCALAPPDATA%\E2EM Runtime`.
-It creates an Add/Remove Programs entry; it does not register a machine service.
-Run user setup in PowerShell, then use the startup command it prints:
-
-```powershell
-$Package = Join-Path $env:LOCALAPPDATA 'E2EM Runtime'
-& "$Package/install_windows_runtime.ps1" -Action install -Binary "$Package/e2emd.exe" -UsePackagedBinary
-& "$Package/install_windows_runtime.ps1" -Action enrol -Principal my-app
-```
+The equivalent command is `e2emd --setup`, using the installed executable path
+above on macOS/Windows. `--setup-headless` uses the same engine without a browser;
+`--setup-status` checks the model and authenticated runtime connection. The
+loopback UI uses a random session path, strict Host/Origin checks, bounded
+requests and no external assets.
 
 Package-managed setup references the installed executable rather than copying
 it. Stop the runtime before upgrades and restart afterward so the new executable
@@ -43,8 +38,8 @@ is used. Package replacement preserves the private user grants and credentials.
 User setup enables [idle background updates](UPDATING.md) by default. Verified
 runtime payloads run from the private per-user update directory under a restart
 supervisor; package-owned files and installer receipts remain intact. SDKs and
-model updates use a separate signed descriptor. Pass `--no-auto-update` to Unix setup or
-`-NoAutoUpdate` to Windows setup to disable this behavior.
+model updates use a separate signed descriptor. Clear the updates checkbox in setup
+or pass `--no-auto-update` to `--setup-headless` to disable this behavior.
 MSI uses a stable UpgradeCode and major-upgrade handling; Debian and RPM use the
 stable `e2em-runtime` name; PKG uses `org.e2em.runtime`. Do not mix a previous
 source-copy installation with package-managed setup: stop/uninstall the previous
@@ -52,12 +47,17 @@ user setup explicitly first.
 
 Stop the runtime before package removal. Package removal retains user setup and
 credentials, so reinstalling a package can reuse them. To erase enrolment, use
-the platform user setup tool's `uninstall` command before removing the package
+the legacy platform user setup tool's `uninstall` command before removing the package
 (see `DESKTOP.md`). On macOS there is no generic PKG uninstaller: after stopping
 the agent, remove only the payload files listed by
 `pkgutil --files org.e2em.runtime`, then forget the receipt with
 `sudo pkgutil --forget org.e2em.runtime`. Forgetting a receipt alone does not
 remove payload files. Never recursively remove `/usr/local` or a user's home.
+
+For Windows guided installations, stop the background process from Task Manager
+and close E2EM Setup before running the legacy `uninstall` action. It removes the
+managed current-user login entry, startup script, model store and enrolment. Then
+remove the MSI using Add/Remove Programs. Package removal alone retains user data.
 
 ## Build locally
 
@@ -72,9 +72,12 @@ python3 scripts/package_runtime.py --format rpm --target x86_64-unknown-linux-mu
 Install the Rust target first. Linux tooling: `dpkg-deb` and `rpmbuild`.
 The Linux daemon is musl-static. Its separate inference worker is built for glibc 2.28; the CPU ONNX Runtime library needs glibc 2.27+ and libstdc++. The initial Linux CI target is x86_64; arm64 staging is
 supported but not an advertised tested build. macOS builds separate Intel and
-Apple Silicon PKGs using `pkgbuild`. Windows builds x64 MSI using WiX 4.0.6
-(`dotnet tool install --global wix --version 4.0.6`). Pass the corresponding
-target and executable to `package_runtime.py`. Windows package CI uses
+Apple Silicon PKGs using `pkgbuild` and `productbuild`. Windows builds x64 MSI using WiX 4.0.6
+(`dotnet tool install --global wix --version 4.0.6` and
+`wix extension add -g WixToolset.UI.wixext/4.0.6`). Pass the corresponding
+target and executable to `package_runtime.py`. Windows also needs the small native
+GUI launcher: build with `--bin e2emd --bin e2em-setup` and pass
+`--setup-binary target/x86_64-pc-windows-msvc/release/e2em-setup.exe`. Windows package CI uses
 `RUSTFLAGS=-C target-feature=+crt-static` so the runtime does not require a
 separate Visual C++ redistributable. `--stage-only` renders review
 files without pretending native package creation occurred. `--version` supports
@@ -86,7 +89,9 @@ build host has only .NET 8 installed.
 ## CI and release boundaries
 
 `.github/workflows/runtime-packages.yml` builds and lifecycle-tests native packages.
-Tagged releases additionally run service conformance and SDK tests before publishing
+Native jobs also run the installed guided setup, authenticated model assessment, app
+enrolment, credential preservation, login startup and reopen checks. Tagged releases
+additionally run service conformance and SDK tests before publishing
 installers, SDK archives, checksums and native reports through GitHub Releases.
 The same native jobs stage standalone update payloads; release validation checks
 their target executable format and includes all four host builds in `SHA256SUMS`.

@@ -5,8 +5,28 @@ use e2em_runtime::runtime::{
 };
 use std::{path::PathBuf, sync::Arc, time::Duration};
 #[derive(Parser)]
-#[command(name = "e2emd", version, about = "Local E2EM developer runtime")]
+#[command(name = "e2emd", version, about = "Local E2EM runtime")]
 struct Args {
+    /// Open guided setup in your browser.
+    #[arg(long, conflicts_with_all = ["setup_headless", "setup_status"])]
+    setup: bool,
+    /// Complete guided setup without a browser (for managed installations).
+    #[arg(long, conflicts_with = "setup_status")]
+    setup_headless: bool,
+    /// Check the model and authenticated runtime connection.
+    #[arg(long)]
+    setup_status: bool,
+    /// Print the local setup URL without opening a browser.
+    #[arg(long, requires = "setup")]
+    setup_no_browser: bool,
+    /// Request consent to connect this application in the setup screen.
+    #[arg(long, requires = "setup")]
+    setup_app: Option<String>,
+    #[arg(long, hide = true)]
+    setup_home: Option<PathBuf>,
+    /// Use a local deployment package during unattended setup.
+    #[arg(long, requires = "setup_headless")]
+    setup_model_source: Option<String>,
     /// Use the diagnostic rules backend instead of the installed model.
     #[arg(long)]
     rules_only: bool,
@@ -36,13 +56,13 @@ struct Args {
     #[arg(long)]
     model_rollback: Option<String>,
     #[cfg(unix)]
-    #[arg(long, required_unless_present_any = ["update_status", "update_check_now", "model_init", "model_install", "model_use", "model_status", "model_check", "model_rollback"])]
+    #[arg(long, required_unless_present_any = ["setup", "setup_headless", "setup_status", "update_status", "update_check_now", "model_init", "model_install", "model_use", "model_status", "model_check", "model_rollback"])]
     socket: Option<PathBuf>,
     #[cfg(windows)]
-    #[arg(long, required_unless_present_any = ["update_status", "update_check_now", "model_init", "model_install", "model_use", "model_status", "model_check", "model_rollback"])]
+    #[arg(long, required_unless_present_any = ["setup", "setup_headless", "setup_status", "update_status", "update_check_now", "model_init", "model_install", "model_use", "model_status", "model_check", "model_rollback"])]
     pipe: Option<String>,
-    #[arg(long)]
-    grants: PathBuf,
+    #[arg(long, required_unless_present_any = ["setup", "setup_headless", "setup_status"])]
+    grants: Option<PathBuf>,
     #[arg(long, default_value_t = 300)]
     idle_seconds: u64,
     /// Check and apply runtime updates in the background during idle periods.
@@ -73,9 +93,39 @@ struct Args {
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    service::read_grants(&args.grants)?;
+    if args.setup || args.setup_headless || args.setup_status {
+        let context = e2em_runtime::runtime::setup::Context::discover(args.setup_home)?
+            .with_app(args.setup_app)?;
+        if args.setup_status {
+            let status = context.status().await;
+            println!("{}", serde_json::to_string_pretty(&status)?);
+            if status["stage"] != "ready" {
+                std::process::exit(1);
+            }
+        } else if args.setup_headless {
+            context
+                .complete(
+                    e2em_runtime::runtime::setup::Preferences {
+                        offline: args.offline,
+                        auto_update: !args.no_auto_update && !args.offline,
+                        start_at_login: true,
+                    },
+                    args.setup_model_source,
+                )
+                .await?;
+            println!("{}", serde_json::to_string_pretty(&context.status().await)?);
+        } else {
+            e2em_runtime::runtime::setup::serve(context, !args.setup_no_browser).await?;
+        }
+        return Ok(());
+    }
+    let grants = args
+        .grants
+        .as_ref()
+        .expect("clap requires grants for runtime commands");
+    service::read_grants(grants)?;
     let model_path = args.model_config.clone().unwrap_or_else(|| {
-        args.grants
+        grants
             .parent()
             .unwrap_or(std::path::Path::new("."))
             .join("models.json")
@@ -121,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
-    let directory = update::supervisor::directory(&args.grants)?;
+    let directory = update::supervisor::directory(grants)?;
     if args.update_status || args.update_check_now {
         let store = Store::open(&directory)?;
         if args.update_status {
@@ -169,7 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(unix)]
     let restarting = service::serve_with_models(
         args.socket.as_deref().unwrap(),
-        &args.grants,
+        grants,
         Duration::from_secs(args.idle_seconds),
         updater,
         (!args.rules_only).then_some(manager),
@@ -179,7 +229,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(windows)]
     let restarting = service::serve_with_models(
         args.pipe.as_deref().unwrap(),
-        &args.grants,
+        grants,
         Duration::from_secs(args.idle_seconds),
         updater,
         (!args.rules_only).then_some(manager),

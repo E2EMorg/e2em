@@ -67,7 +67,9 @@ Enter a message such as `See you at 6!`. The demo uses every applicable built-in
 | Linux · Ubuntu / Debian, 64-bit | `x86_64-unknown-linux-musl.deb` | [Debian / Ubuntu setup](docs/INSTALL.md#linux) |
 | Linux · Fedora / RPM, 64-bit | `x86_64-unknown-linux-musl.rpm` | [Fedora setup](docs/INSTALL.md#linux) |
 
-> Installers are unsigned; Windows/macOS may require permission to open them. Enrolment and startup remain explicit. E2EM works inside apps that integrate it. Native inference and installer reports accompany each release. The developing standard does not claim per-category model qualification.
+Open **E2EM Setup** after installation and choose **Set up E2EM**. The same screen on every platform installs Gandalf, starts the runtime in the background, enables startup at login, and checks a local assessment before showing **Ready**. No terminal commands or Python installation are needed. Connect your app from the Ready screen. Offline and update preferences are available in setup.
+
+> Installers are unsigned; Windows/macOS may require permission to open them. E2EM works inside apps that integrate it. Native inference and installer reports accompany each release. The developing standard does not claim per-category model qualification.
 
 ---
 

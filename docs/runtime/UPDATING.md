@@ -62,7 +62,8 @@ signing and notarization remain distribution milestones.
 
 Direct daemon invocation keeps network updates off unless `--auto-update` is
 present. The user setup tools add it to Linux/macOS startup configuration and
-the printed Windows startup command. Existing startup configurations can add
+the Windows background startup configuration. Native guided setup offers an
+updates checkbox; `--setup-headless --no-auto-update` applies the same opt-out. Existing startup configurations can add
 the same flag after upgrading to an updater-capable executable.
 
 | Daemon flag | Behavior |
