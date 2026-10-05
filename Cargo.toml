@@ -4,7 +4,7 @@ resolver = "3"
 
 [package]
 name = "e2em-runtime"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.95"
 default-run = "e2emd"
@@ -40,7 +40,7 @@ resource-preflight = ["dep:sysinfo"]
 runtime-probes = []
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
-e2em-platform = { version = "0.1.2", path = "crates/e2em-platform", optional = true }
+e2em-platform = { version = "0.1.3", path = "crates/e2em-platform", optional = true }
 
 [dependencies]
 ed25519-dalek = { version = "2", optional = true }

@@ -9,16 +9,20 @@ impl RevisionGuard {
         Self { snapshot }
     }
     /// Bind continuation to the complete request, including context and policy.
-    /// A confirmation applies only to this snapshot and never grants future sends.
+    /// Warnings are advisory and require no user confirmation.
+    /// The legacy confirmation argument is ignored for source compatibility.
     pub fn can_continue(
         &self,
         assessment: &Assessment,
         current: &Request,
-        confirmed: bool,
+        _confirmed: bool,
     ) -> bool {
         if &self.snapshot != current
             || !assessment.applies_to(current)
             || assessment.status != Status::Assessed
+            || !assessment.coverage.target_complete
+            || !assessment.coverage.context_complete
+            || !assessment.coverage.unevaluated_rules.is_empty()
         {
             return false;
         }
@@ -33,14 +37,7 @@ impl RevisionGuard {
             return false;
         }
         match assessment.action {
-            Action::Allow => true,
-            Action::Warn => {
-                confirmed
-                    && current
-                        .policy
-                        .as_ref()
-                        .is_some_and(|p| p.r#override == Override::UserConfirm)
-            }
+            Action::Allow | Action::Warn => true,
             Action::Review | Action::Block => false,
         }
     }

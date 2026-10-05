@@ -12,6 +12,15 @@ dynamic fixture(String name) =>
 Json clone(Json value) => jsonDecode(jsonEncode(value)) as Json;
 
 void main() {
+  final automaticApp = Platform.environment['E2EM_DART_AUTO_APP'];
+  if (automaticApp != null) {
+    test('automatic app connection requires no interaction', () async {
+      final report = await assess('alex@example.test',
+          app: automaticApp, policies: ['pii.email']);
+      expect(report.status, 'assessed');
+      expect(report.action, 'warn');
+    });
+  }
   test('shared live desktop conformance', () async {
     final settings = Platform.environment['E2EM_DART_CONFIG']!;
     Client? ready;

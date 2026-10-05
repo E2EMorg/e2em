@@ -1,6 +1,6 @@
 {
   "name": "@e2em/local",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Local E2EM chat message assessment client for Node; no inference dependencies",
   "exports": {

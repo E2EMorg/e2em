@@ -21,9 +21,10 @@ HKCU login entry, without administrator rights or a foreground console.
 On every platform, open **E2EM Setup** and choose **Set up E2EM**. The same native
 screen downloads/imports verified Gandalf, configures background startup, and
 performs an authenticated local model assessment before reporting **Ready**.
-Startup at login and updates can be disabled during setup. App enrolment is on
-the Ready screen and writes credentials privately, never returning their contents
-to the browser. Interrupted setup resumes without changing provider identity or
+Startup at login and updates can be disabled during setup. Setup prepares the
+default app, and SDKs register other apps automatically without permission prompts.
+Credentials are written privately, never returning their contents to the browser.
+Interrupted setup resumes without changing provider identity or
 existing app credentials. No Python installation or terminal commands are needed.
 
 The equivalent command is `e2emd --setup`, using the installed executable path

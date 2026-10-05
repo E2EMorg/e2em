@@ -99,14 +99,21 @@ def main():
             if state['stage'] == 'error': raise AssertionError(state['message'])
             time.sleep(.5)
         else: raise AssertionError('guided setup did not become ready')
-        connected = request('enrol', {'principal': 'my-app'})
+        # Default app settings exist without a Connect app approval.
+        credential = config / ('app-my-app.json' if system == 'Windows' else 'apps/my-app.json')
+        assert credential.is_file(), 'setup did not connect the default app automatically'
+        run(binary, '--connect-app', 'onboarding-app')
+        automatic = config / ('app-onboarding-app.json' if system == 'Windows' else 'apps/onboarding-app.json')
+        assert automatic.is_file(), 'direct app connection required an approval'
+        private_settings = automatic.read_bytes()
+        run(binary, '--connect-app', 'onboarding-app')
+        assert automatic.read_bytes() == private_settings, 'automatic connection rotated credentials'
         # The internal setup grant and provider must survive the failed model
         # step and the successful retry unchanged.
         initial_registry = json.loads(initial_grants)
         current_registry = json.loads((config / 'grants.json').read_bytes())
         assert current_registry['provider'] == initial_registry['provider']
         assert initial_registry['grants'][0] in current_registry['grants']
-        credential = Path(connected['credential_path'])
         before = credential.read_bytes()
         grants = (config / 'grants.json').read_bytes()
         request('enrol', {'principal': 'my-app'})
@@ -160,7 +167,7 @@ def main():
             assert 'start-runtime.ps1' in value
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps({'platform': system, 'guided_setup': True, 'model_assessment': True,
-            'autostart': True, 'preferences_restart': True, 'reopen': True, 'retry': True, 'credentials_preserved': True, 'foreign_origin_rejected': True,
+            'autostart': True, 'automatic_app_connection': True, 'preferences_restart': True, 'reopen': True, 'retry': True, 'credentials_preserved': True, 'foreign_origin_rejected': True,
             'setup_stages_observed': sorted(stages)}, indent=2) + '\n')
         print('Guided setup, verified model assessment, background startup, app enrolment and reopen passed')
     except Exception:

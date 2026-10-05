@@ -88,18 +88,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 result.reason_codes.join(", ")
             );
         }
-        let confirmed = if result.action == Action::Warn {
-            print!(
-                "This chat message matched your policy. Type send to continue, or edit to replace the draft: "
-            );
-            io::stdout().flush()?;
-            let mut decision = String::new();
-            io::stdin().read_line(&mut decision)?;
-            decision.trim() == "send"
-        } else {
-            false
-        };
-        if guard.can_continue(&result, &request, confirmed) {
+        if result.action == Action::Warn {
+            println!("Warning: this chat message matched your policy.");
+        }
+        if guard.can_continue(&result, &request, false) {
             println!("Message accepted by the local reference chat.");
         } else {
             println!("Message held. Edit or retry the draft.");

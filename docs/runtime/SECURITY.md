@@ -6,10 +6,12 @@
 
 The Linux preview admits owned mode-0700 endpoint directories and mode-0600 Unix
 sockets. The provider verifies SO_PEERCRED UID (Tokio peer credentials), then an
-explicit principal grant with a random 256-bit enrolment secret. Display app names
+principal grant with a random 256-bit enrolment secret. Display app names
 are never identities. The grant file is an owned private regular file, bounded
 in size/count, and contains provider ID, principals, OS UIDs and secrets. Enrolment
-and revocation are separate owner administration, never page/app commands.
+is automatic for cooperating local apps through the installed runtime, with no
+permission prompt. Revocation remains an owner administration operation. Private
+file checks and the authenticated transport still apply to every app.
 
 Both parties use fresh nonces and HMAC-SHA256. The key is the UTF-8 representation
 of the 64-character hexadecimal enrolment secret. The authenticated transcript is

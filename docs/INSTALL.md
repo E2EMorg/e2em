@@ -16,7 +16,7 @@ Installers are unsigned. macOS/Windows can warn about an unverified publisher; s
 
 The same setup works on every platform: **install the package → open E2EM Setup → choose Set up E2EM**. The setup screen opens in your browser, downloads or imports verified Gandalf assets, starts the runtime in the background, and runs a local assessment before showing **Ready**. No terminal commands, Python installation, user account, or GPU are needed. Start at login and automatic updates are enabled by default, with checkboxes to opt out.
 
-Offline installer filenames add `-offline-` after the version and include the same model. Select **Offline installation** in setup to disable all network activity. Interrupted setup can be retried with **Try again**; completed downloads and existing app credentials are preserved. Reopen E2EM Setup whenever you want to check readiness or connect another app. Installing E2EM does not change other applications until you connect them.
+Offline installer filenames add `-offline-` after the version and include the same model. Select **Offline installation** in setup to disable all network activity. Interrupted setup can be retried with **Try again**; completed downloads and existing app credentials are preserved. Reopen E2EM Setup whenever you want to check readiness. Apps using the SDK connect automatically once runtime setup is complete.
 
 ## Windows
 
@@ -47,13 +47,13 @@ Install the downloaded file from your Downloads directory, replacing the version
 Ubuntu / Debian:
 
 ```sh
-sudo apt install ./e2em-runtime-0.1.2-x86_64-unknown-linux-musl.deb
+sudo apt install ./e2em-runtime-0.1.3-x86_64-unknown-linux-musl.deb
 ```
 
 Fedora:
 
 ```sh
-sudo dnf install ./e2em-runtime-0.1.2-x86_64-unknown-linux-musl.rpm
+sudo dnf install ./e2em-runtime-0.1.3-x86_64-unknown-linux-musl.rpm
 ```
 
 Open **E2EM Setup** from your applications menu, choose **Set up E2EM**, and wait for **Ready**. Select **Done** to close setup; the runtime keeps running in the background. You can also open the same screen with `e2emd --setup` as your normal user.
@@ -62,7 +62,7 @@ The app credential file is `~/.config/e2em/apps/my-app.json`. The runtime proces
 
 ## Connect an application
 
-On the **Ready** screen, enter the application name supplied by its integration and select **Connect app**. Use `my-app` for the [SDK examples](SDK.md), and a different name for each real app. Connecting an already enrolled app preserves its credentials. Credentials are written privately to your computer and are never sent to the setup page. The legacy scripts still support explicit credential rotation and revocation.
+Apps connect automatically through `Client.connect` or `assess`; no permission or confirmation is required. Use `my-app` for the [SDK examples](SDK.md), and a different `app` name for each real app. Setup prepares `my-app` automatically, and SDKs register other apps on first use. Connecting again preserves credentials. Credentials are written privately to your computer and are never sent to the setup page. For direct provisioning, run `e2emd --connect-app APP_NAME` as your normal user. The legacy scripts still support explicit credential rotation and revocation.
 
 See [Python](../sdk/python/README.md), [Node / TypeScript](../sdk/node/README.md), or [embedded C/C++](../crates/e2em-ffi/README.md). Start with the [message-first SDK examples](SDK.md). Send a message, add optional context, and use all presets by default; policy files are optional. The native service accepts named categories in personal warning/review policies. The default model is Gandalf. Missing conversation and token truncation return incomplete coverage; supported custom models can be selected in the SDK. See [model provisioning and updates](runtime/MODELS.md). Platform authority remains unsupported.
 
@@ -98,7 +98,7 @@ For exact removal commands, macOS PKG receipt handling, source installations, an
 | No runtime files in the release | Read the release notes; source archives and SDK files are separate from installers. |
 | Setup was interrupted | Reopen E2EM Setup and select **Try again** or **Set up E2EM**. Completed downloads and app credentials are kept. |
 | A different E2EM installation already exists | Stop and remove the previous source-copy installation before setting up the package-managed runtime. |
-| `MODEL_UNAVAILABLE` | Check the runtime is running, the app is enrolled, and its credentials match this provider. Check `--model-status` with the grants path to verify that the selected model is installed. |
+| `MODEL_UNAVAILABLE` | Complete runtime setup and check the runtime is running. New apps register automatically; existing credentials must match this provider. Check `--model-status` with the grants path to verify that the selected model is installed. |
 | Policy reference stops working after restart | Reconnect and validate the policy again; references belong to one provider instance. |
 | App cannot access the endpoint from a sandbox | Shared access is not promised for sandboxed apps; use an embedded integration where permitted. |
 | Unevaluated category | The category was accepted, but its detector or model is unavailable. Check `coverage.unevaluated_rules` and reason codes. |

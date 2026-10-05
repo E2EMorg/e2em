@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import struct
 import subprocess
 import sys
@@ -149,6 +150,51 @@ class Service(unittest.IsolatedAsyncioTestCase):
             defaults = await asyncio.to_thread(assess, "Hello")
         self.assertEqual(len(defaults.request["policy"]["rules"]), len(PRESETS))
         self.assertEqual(defaults.status, "indeterminate")
+
+    async def test_first_use_registers_sdk_apps_without_interaction(self):
+        home = self.directory / "home"
+        root = home / ".config/e2em"
+        root.mkdir(parents=True, mode=0o700)
+        runtime = home / "Library/Caches/e2em" if sys.platform == "darwin" else home / "run/e2em"
+        runtime.mkdir(parents=True, mode=0o700)
+        endpoint = runtime / "runtime.sock"
+        registry = root / "grants.json"
+        registry.write_text(json.dumps(self.grants)); registry.chmod(0o600)
+        self.native_process = subprocess.Popen(
+            [os.environ["E2EM_SERVICE_BIN"], "--rules-only", "--socket", str(endpoint), "--grants", str(registry)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        await self.wait_ready(str(endpoint), "test-provider")
+        environment = {**os.environ, "HOME": str(home), "XDG_RUNTIME_DIR": str(home / "run"),
+                       "PATH": str(Path(os.environ["E2EM_SERVICE_BIN"]).parent) + os.pathsep + os.environ["PATH"],
+                       "PUB_CACHE": os.environ.get("PUB_CACHE", str(Path.home() / ".pub-cache")),
+                       "PYTHONPATH": str(ROOT / "sdk/python")}
+        apps = ["automatic-python", "automatic-node"]
+        commands = [
+            [sys.executable, "-c", 'from e2em import assess; r = assess("alex@example.test", app="automatic-python", policies="pii.email"); assert r.status == "assessed" and r.action == "warn"'],
+            ["node", "--input-type=module", "-e", 'import {assess} from "./sdk/node/index.js"; const r = await assess("alex@example.test", {app:"automatic-node", policies:"pii.email"}); if (r.status !== "assessed" || r.action !== "warn") throw new Error("assessment failed");'],
+        ]
+        if shutil.which("dart") and (ROOT / "sdk/dart/.dart_tool/package_config.json").exists():
+            apps.append("automatic-dart")
+            environment["E2EM_DART_AUTO_APP"] = "automatic-dart"
+            commands.append(["dart", "test", "test/live.dart", "--name", "automatic app connection"])
+        async def run(command):
+            cwd = ROOT / "sdk/dart" if command[0] == "dart" else ROOT
+            result = await asyncio.to_thread(subprocess.run, command, cwd=cwd, env=environment,
+                                             stdin=subprocess.DEVNULL, capture_output=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
+        await asyncio.gather(*(run(command) for command in commands))
+        credentials = {app: (root / f"apps/{app}.json").read_bytes()
+                       for app in apps}
+        before = registry.read_bytes()
+        await asyncio.gather(*(run(command) for command in commands))
+        self.assertEqual(registry.read_bytes(), before)
+        for app, credential in credentials.items():
+            self.assertEqual((root / f"apps/{app}.json").read_bytes(), credential)
+        # Missing explicitly supplied settings must never trigger registration.
+        missing = root / "apps/explicit-only.json"
+        with self.assertRaises(E2EMError):
+            await Client.connect("explicit-only", config_path=missing)
+        self.assertFalse(missing.exists())
     async def test_windows_pipe_adapter_preserves_provider_authentication(self):
         # Exercise the Windows client branch on the Unix fixture transport; this
         # validates adapter framing/authentication, not Windows ACLs or IOCP.

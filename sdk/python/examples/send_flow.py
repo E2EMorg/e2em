@@ -27,9 +27,9 @@ async def main():
         # The real host increments revision and changes current when an edit occurs.
         if not result.applies_to(current):
             print("Draft changed; assess its new revision.");return
-        permitted=result.action == "allow"
-        if result.action == "warn" and policy["override"] == "user_confirm":
-            permitted=input("This chat message matched your policy. Type send to continue: ") == "send"
+        permitted=result.status == "assessed" and result.action in ("allow", "warn")
+        if result.action == "warn":
+            print("Warning: this chat message matched your policy.")
         if permitted and result.applies_to(current):
             print("Message accepted by the local reference chat.")
         else: print("Message held. Edit or retry.")

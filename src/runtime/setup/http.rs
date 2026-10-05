@@ -17,6 +17,11 @@ struct Session {
 }
 
 pub async fn serve(context: Context, open_browser: bool) -> io::Result<()> {
+    if context.root.join("grants.json").exists()
+        && let Some(app) = &context.requested_app
+    {
+        context.connect_app(app)?;
+    }
     let lock = match context.lock() {
         Ok(lock) => lock,
         Err(error) if error.kind() == io::ErrorKind::WouldBlock => {

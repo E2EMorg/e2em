@@ -175,7 +175,7 @@ fn descriptor(source: &str, update: bool) -> io::Result<(Descriptor, Option<Path
     }
     let response = agent()
         .get(&url)
-        .set("User-Agent", "e2em-models/0.1.2")
+        .set("User-Agent", "e2em-models/0.1.3")
         .call()
         .map_err(io::Error::other)?;
     let mut bytes = Vec::new();
@@ -470,7 +470,7 @@ impl Manager {
                     let client = agent();
                     let request = client
                         .get(&asset.url)
-                        .set("User-Agent", "e2em-models/0.1.2");
+                        .set("User-Agent", "e2em-models/0.1.3");
                     let response = if start > 0 && start < asset.bytes {
                         request.set("Range", &format!("bytes={start}-")).call()
                     } else {

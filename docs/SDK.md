@@ -6,16 +6,14 @@ Send a message and get a report. All built-in presets are selected automatically
 
 The service uses Gandalf by default and includes all 40 presets. It scores custom text and supports registered custom model selection through `model` options. [Normal/offline provisioning and model format](runtime/MODELS.md).
 
-For first-run app onboarding, open the installed runtime with
-`e2emd --setup --setup-app YOUR_APP_NAME`. This opens the same setup screen on
-every desktop platform and pre-fills the application's name. The user sets up
-the model if needed and approves **Connect app**, then returns to your app.
-Connect again using the SDK's `app` option; the resulting private credentials
-are loaded automatically. App enrolment always needs that explicit approval;
-opening the screen alone grants no access. Use the installed executable path
-from the [installation guide](INSTALL.md) on macOS/Windows.
-On Windows, integrations can use the console-free launcher
-`e2em-setup.exe --setup-app YOUR_APP_NAME` beside the installed daemon.
+After [one-time runtime setup](INSTALL.md), use the SDK's `app` option to
+identify your application. The SDK automatically registers a new app with the
+installed runtime and loads its private local settings. No permission prompt,
+browser, or **Connect app** approval is required. Existing credentials are
+preserved. Explicit `config_path` / `configPath` settings are loaded as supplied.
+For runtime setup launched from an app, `e2emd --setup --setup-app YOUR_APP_NAME`
+also connects the app automatically. Windows integrations can use the console-free
+`e2em-setup.exe --setup-app YOUR_APP_NAME` launcher beside the installed daemon.
 
 ## Python
 
@@ -25,7 +23,7 @@ Install the SDK from a checkout or a downloaded release package:
 python3 -m pip install ./sdk/python
 ```
 
-After [one-time runtime and app setup](INSTALL.md):
+After [one-time runtime setup](INSTALL.md):
 
 ```python
 from e2em import assess
@@ -104,7 +102,7 @@ dependencies:
     path: /path/to/e2em/sdk/dart
 ```
 
-After one-time runtime setup and app enrolment:
+After one-time runtime setup:
 
 ```dart
 import 'package:e2em_local/e2em.dart';
@@ -163,9 +161,9 @@ Unavailable model/custom checks report `MODEL_UNAVAILABLE`; unimplemented determ
 
 ## Local service setup
 
-Python, Node, and Dart connect to the installed local service. `app` defaults to `my-app`, matching the [setup guide](INSTALL.md). Once your app is enrolled, `Client.connect`, `BlockingClient`, and standalone `assess` load its local settings automatically. There is no account sign-in, remote service, or manual credential argument in the quick start.
+Python, Node, and Dart connect to the installed local service. `app` defaults to `my-app`, matching the [setup guide](INSTALL.md). `Client.connect`, `BlockingClient`, and standalone `assess` register new apps and load their local settings automatically. There is no permission prompt, account sign-in, remote service, or manual credential argument in the quick start.
 
-The service authenticates each app to keep its policies and requests separate from other enrolled apps. Its private local token is created by setup and read by the SDK. Embedded Rust/C assessment runs inside your app and does not need this token. Installing the runtime alone does not start it or enrol an app.
+The service authenticates each app to keep its policies and requests separate from other registered apps. Its private local token is created automatically by the installed runtime and read by the SDK. Embedded Rust/C assessment runs inside your app and does not need this token. Installing the runtime alone does not start it; complete runtime setup once before using the service.
 
 Default settings for `my-app` are stored at `~/.config/e2em/apps/my-app.json` on Linux/macOS and `%LOCALAPPDATA%\E2EM\app-my-app.json` on Windows. Use `config_path` in Python or `configPath` in Node/Dart for an explicitly provisioned alternative. SDK loaders check private Unix file ownership and permissions. Keep these installer-managed settings out of source control.
 
@@ -175,7 +173,7 @@ Files are optional. For bulk rules, strict message thresholds, policy versioning
 
 `Client.open` still accepts explicit provisioned connection details; `discover` accepts a candidate list and an optional required-detector list. Requiring a detector means the chosen provider must actually implement it. Do not silently retry or switch providers on errors.
 
-Before sending, compare the report with the current message, context, and policy snapshot. Simple reports expose `report.request`; use Python `applies_to(current_request)` or Node/Dart `appliesTo(currentRequest)`. Invalidate after any edit. `integration::RevisionGuard` provides the Rust send guard. Allow only `allow`, or an explicitly confirmed `warn` permitted by policy. Hold errors, cancellations, stale results, incomplete coverage, and `review` for editing or review. Recheck after warning confirmation.
+Before sending, compare the report with the current message, context, and policy snapshot. Simple reports expose `report.request`; use Python `applies_to(current_request)` or Node/Dart `appliesTo(currentRequest)`. Invalidate after any edit. `integration::RevisionGuard` provides the Rust send guard. A complete, current `allow` or `warn` may proceed automatically; warnings are advisory and require no confirmation. Hold errors, cancellations, stale results, incomplete coverage, and `review` for editing or review. Recheck the snapshot at the send boundary.
 
 Context is optional. Advanced rules can require a supplied window; missing required context produces an indeterminate report. Limits are 32 prior messages, 16,384 UTF-8 bytes per message, 65,536 total text bytes, 64 rules, and 512 bytes per custom policy text. See the [contract](runtime/CONTRACT.md) for deadlines and full semantics. The service grants personal warning/review authority; platform enforcement and block policies remain unsupported.
 

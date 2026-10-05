@@ -835,12 +835,12 @@ fn request_options_have_individual_defaults() {
 }
 
 #[test]
-fn send_confirmation_cannot_apply_after_text_context_or_policy_edits() {
+fn advisory_warnings_continue_without_confirmation_only_for_complete_current_drafts() {
     use e2em_runtime::runtime::integration::RevisionGuard;
     let r = request();
     let guard = RevisionGuard::new(r.clone());
     let result = Engine::default().assess("app", &r);
-    assert!(!guard.can_continue(&result, &r, false));
+    assert!(guard.can_continue(&result, &r, false));
     assert!(guard.can_continue(&result, &r, true));
     for index in 0..4 {
         let mut edited = r.clone();
@@ -863,7 +863,25 @@ fn send_confirmation_cannot_apply_after_text_context_or_policy_edits() {
     let mut forbidden = r.clone();
     forbidden.policy.as_mut().unwrap().r#override = Override::Forbidden;
     let result = Engine::default().assess("app", &forbidden);
-    assert!(!RevisionGuard::new(forbidden.clone()).can_continue(&result, &forbidden, true));
+    assert!(RevisionGuard::new(forbidden.clone()).can_continue(&result, &forbidden, false));
+    for index in 0..3 {
+        let mut incomplete = result.clone();
+        match index {
+            0 => incomplete.coverage.target_complete = false,
+            1 => incomplete.coverage.context_complete = false,
+            _ => incomplete.coverage.unevaluated_rules.push("missing".into()),
+        }
+        assert!(!RevisionGuard::new(forbidden.clone()).can_continue(
+            &incomplete,
+            &forbidden,
+            false
+        ));
+    }
+    for action in [Action::Review, Action::Block] {
+        let mut held = result.clone();
+        held.action = action;
+        assert!(!RevisionGuard::new(forbidden.clone()).can_continue(&held, &forbidden, false));
+    }
 }
 
 #[test]

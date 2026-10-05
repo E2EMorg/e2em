@@ -5,10 +5,22 @@ import fs from 'node:fs/promises';
 import {constants} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {messageRequest} from './message.js';
 export {presets} from './message.js';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 const MAX_FRAME = 131072;
+const run = promisify(execFile);
+async function registerApp(app) {
+  const installed = process.platform === 'win32'
+    ? path.join(process.env.LOCALAPPDATA, 'E2EM Runtime', 'e2emd.exe')
+    : '/usr/local/libexec/e2em/e2emd';
+  let binary = 'e2emd';
+  try { await fs.access(installed, constants.F_OK); binary = installed; }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  await run(binary, ['--connect-app', app], {timeout: 10000, maxBuffer: 16384, windowsHide: true});
+}
 export class E2EMError extends Error {
   constructor(code) { super(code); this.code = code; this.action = 'review'; }
 }
@@ -122,10 +134,20 @@ export class Client {
     let connection;
     try {
       if (typeof app !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(app)) throw 0;
+      const automatic = configPath == null;
       configPath ??= process.platform === 'win32'
         ? path.join(process.env.LOCALAPPDATA, 'E2EM', `app-${app}.json`)
         : path.join(os.homedir(), '.config/e2em/apps', `${app}.json`);
-      file = await fs.open(configPath, constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW));
+      const flags = constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      try { file = await fs.open(configPath, flags); }
+      catch (error) {
+        if (!automatic || error.code !== 'ENOENT') throw error;
+        // An existing dangling symlink is invalid settings, not a new app.
+        try { await fs.lstat(configPath); throw new E2EMError('MODEL_UNAVAILABLE'); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        await registerApp(app);
+        file = await fs.open(configPath, flags);
+      }
       const metadata = await file.stat();
       if (!metadata.isFile() || metadata.size > 16384 || (process.platform !== 'win32' && (metadata.uid !== process.getuid() || metadata.mode & 0o077))) throw 0;
       const config = JSON.parse(await file.readFile('utf8'));

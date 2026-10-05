@@ -19,9 +19,12 @@ struct Args {
     /// Print the local setup URL without opening a browser.
     #[arg(long, requires = "setup")]
     setup_no_browser: bool,
-    /// Request consent to connect this application in the setup screen.
+    /// Connect this application automatically during setup.
     #[arg(long, requires = "setup")]
     setup_app: Option<String>,
+    /// Provision local app settings without opening a browser or asking permission.
+    #[arg(long, conflicts_with_all = ["setup", "setup_headless", "setup_status"])]
+    connect_app: Option<String>,
     #[arg(long, hide = true)]
     setup_home: Option<PathBuf>,
     /// Use a local deployment package during unattended setup.
@@ -56,12 +59,12 @@ struct Args {
     #[arg(long)]
     model_rollback: Option<String>,
     #[cfg(unix)]
-    #[arg(long, required_unless_present_any = ["setup", "setup_headless", "setup_status", "update_status", "update_check_now", "model_init", "model_install", "model_use", "model_status", "model_check", "model_rollback"])]
+    #[arg(long, required_unless_present_any = ["connect_app", "setup", "setup_headless", "setup_status", "update_status", "update_check_now", "model_init", "model_install", "model_use", "model_status", "model_check", "model_rollback"])]
     socket: Option<PathBuf>,
     #[cfg(windows)]
-    #[arg(long, required_unless_present_any = ["setup", "setup_headless", "setup_status", "update_status", "update_check_now", "model_init", "model_install", "model_use", "model_status", "model_check", "model_rollback"])]
+    #[arg(long, required_unless_present_any = ["connect_app", "setup", "setup_headless", "setup_status", "update_status", "update_check_now", "model_init", "model_install", "model_use", "model_status", "model_check", "model_rollback"])]
     pipe: Option<String>,
-    #[arg(long, required_unless_present_any = ["setup", "setup_headless", "setup_status"])]
+    #[arg(long, required_unless_present_any = ["connect_app", "setup", "setup_headless", "setup_status"])]
     grants: Option<PathBuf>,
     #[arg(long, default_value_t = 300)]
     idle_seconds: u64,
@@ -93,6 +96,10 @@ struct Args {
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    if let Some(app) = args.connect_app {
+        e2em_runtime::runtime::setup::Context::discover(args.setup_home)?.connect_app(&app)?;
+        return Ok(());
+    }
     if args.setup || args.setup_headless || args.setup_status {
         let context = e2em_runtime::runtime::setup::Context::discover(args.setup_home)?
             .with_app(args.setup_app)?;

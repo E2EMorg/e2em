@@ -12,6 +12,8 @@ import re
 import socket
 import stat
 import struct
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -98,6 +100,19 @@ def _assessment(value: Any, request: dict) -> Assessment:
     return Assessment(copy.deepcopy(value), _snapshot(request), copy.deepcopy(request))
 
 
+def _register_app(app):
+    if os.name == "nt":
+        installed = Path(os.environ["LOCALAPPDATA"]) / "E2EM Runtime/e2emd.exe"
+    else:
+        installed = Path("/usr/local/libexec/e2em/e2emd")
+    binary = str(installed) if installed.is_file() else shutil.which("e2emd")
+    if not binary:
+        raise OSError("E2EM runtime is not installed")
+    subprocess.run([binary, "--connect-app", app], check=True, timeout=10,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+
+
 def _connection(app="my-app", config_path=None):
     """Load installer-managed local app settings without exposing secrets to callers."""
     try:
@@ -107,7 +122,14 @@ def _connection(app="my-app", config_path=None):
             Path(os.environ["LOCALAPPDATA"]) / "E2EM" / f"app-{app}.json"
             if os.name == "nt" else Path.home() / ".config/e2em/apps" / f"{app}.json"
         )
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        try:
+            descriptor = os.open(path, flags)
+        except FileNotFoundError:
+            if config_path is not None or path.is_symlink():
+                raise
+            _register_app(app)
+            descriptor = os.open(path, flags)
         with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
             metadata = os.fstat(stream.fileno())
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 16384:
@@ -123,7 +145,7 @@ def _connection(app="my-app", config_path=None):
         if config["principal"] != app:
             raise ValueError()
         return {key: config[key] for key in fields}
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
         raise E2EMError("MODEL_UNAVAILABLE") from exc
 
 class Client:
@@ -141,7 +163,8 @@ class Client:
 
     @classmethod
     async def connect(cls, app: str = "my-app", *, config_path=None, model=None) -> Client:
-        return await cls.open(**_connection(app, config_path), model=model)
+        settings = await asyncio.to_thread(_connection, app, config_path)
+        return await cls.open(**settings, model=model)
 
     @classmethod
     async def open(cls, socket_path: str, principal: str, secret: str, provider: str, model=None) -> Client:

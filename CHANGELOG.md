@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3
+
+- Register SDK apps automatically without a Connect app approval step; provision default app settings during runtime setup.
+- Treat complete warning results as advisory and continue without confirmation, retaining draft revision and coverage checks.
+- Add the same native guided setup screen on Linux, macOS and Windows, with menu launchers, model provisioning, background startup, login/update preferences, app enrolment and an authenticated model assessment before reporting Ready. Python is no longer required for runtime onboarding.
+- Resume interrupted setup and preserve existing app credentials; include guided onboarding checks in native package CI.
+- Add idle background runtime updates, verified host payloads, release channels, status controls and bounded retries.
+- Supervise per-user update activation with readiness probation, retained previous versions and automatic rollback; preserve package-owned files and grants.
+- Enable updates in managed user setup, with opt-out, managed cleanup and offline lifecycle tests.
+
 ## 0.1.2
 
 - Gandalf is the default native CPU model, provisioned during normal user setup or bundled in offline installers under MIT with upstream notices.
@@ -7,15 +17,6 @@
 - Custom model URLs/aliases across Rust, C, Python and Node; owner-controlled model installation.
 - All 40 default policies, optional context and custom text; exact email detection plus explicit model fallbacks. Frozen Gandalf thresholds are retained.
 - Token truncation reports incomplete coverage; bounded cancellation, disposable workers and recovery keep later requests usable. Assessment deadlines default to 15 seconds, with a 30-second maximum.
-
-
-## Unreleased
-
-- Add the same native guided setup screen on Linux, macOS and Windows, with menu launchers, model provisioning, background startup, login/update preferences, app enrolment and an authenticated model assessment before reporting Ready. Python is no longer required for runtime onboarding.
-- Resume interrupted setup and preserve existing app credentials; include guided onboarding checks in native package CI.
-- Add idle background runtime updates, verified host payloads, release channels, status controls and bounded retries.
-- Supervise per-user update activation with readiness probation, retained previous versions and automatic rollback; preserve package-owned files and grants.
-- Enable updates in managed user setup, with opt-out, managed cleanup and offline lifecycle tests.
 
 ## 0.1.1 — First downloadable developer preview
 

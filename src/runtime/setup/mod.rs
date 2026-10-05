@@ -74,6 +74,53 @@ mod tests {
         (home, context)
     }
     #[test]
+    fn setup_provisions_default_and_requested_apps_without_approval() {
+        let (_home, context) = fixture();
+        let context = context.with_app(Some("chat-app".into())).unwrap();
+        context.initialize(Preferences::default()).unwrap();
+        for app in ["my-app", "chat-app"] {
+            let path = context.connect_app(app).unwrap();
+            let settings: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            assert_eq!(settings["principal"], app);
+            assert_eq!(settings["socket_path"], context.endpoint);
+        }
+    }
+    #[test]
+    fn concurrent_app_connections_preserve_all_grants_and_credentials() {
+        let (_home, context) = fixture();
+        context.initialize(Preferences::default()).unwrap();
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|index| {
+                    let context = &context;
+                    scope.spawn(move || {
+                        let app = format!("chat-{}", index % 4);
+                        context.connect_app(&app).unwrap()
+                    })
+                })
+                .collect();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
+        let grants = service::read_grants(&context.root.join("grants.json")).unwrap();
+        assert_eq!(grants.grants.len(), 6);
+        for index in 0..4 {
+            let app = format!("chat-{index}");
+            let path = context.connect_app(&app).unwrap();
+            let settings: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            assert_eq!(
+                settings["secret"],
+                grants
+                    .grants
+                    .iter()
+                    .find(|g| g.principal == app)
+                    .unwrap()
+                    .secret
+            );
+        }
+    }
+    #[test]
     fn retries_and_reenrolment_preserve_credentials_and_provider_identity() {
         let (_home, context) = fixture();
         context.initialize(Preferences::default()).unwrap();
@@ -304,8 +351,17 @@ impl Context {
         }
         service::read_grants(&grants_path)?;
         self.enrol(PRINCIPAL, false)?;
+        self.connect_app("my-app")?;
+        if let Some(app) = &self.requested_app {
+            self.connect_app(app)?;
+        }
         store.write("onboarding.json", &preferences)?;
         Ok(())
+    }
+
+    /// Register a cooperating local app without an interactive approval step.
+    pub fn connect_app(&self, principal: &str) -> io::Result<PathBuf> {
+        self.enrol(principal, true)
     }
 
     pub(super) fn enrol(&self, principal: &str, credential: bool) -> io::Result<PathBuf> {
@@ -320,6 +376,18 @@ impl Context {
                 "Use an application name of 1–64 letters, numbers, hyphens, or underscores.",
             ));
         }
+        // SDKs can register concurrently, including while setup is open.
+        platform::private_directory(&self.root)?;
+        let path = self.root.join("apps.lock");
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let lock = options.open(path)?;
+        fs2::FileExt::lock_exclusive(&lock)?;
         let store = self.config_store()?;
         service::read_grants(&self.root.join("grants.json"))?;
         let mut registry: Value = store.read("grants.json")?;

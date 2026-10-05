@@ -74,7 +74,7 @@ class Client {
 
   static Future<Client> connect(
       {String app = 'my-app', String? configPath, String? model}) async {
-    final settings = connection(app, configPath);
+    final settings = await automaticConnection(app, configPath);
     return open(
         socketPath: settings['socket_path'] as String,
         principal: settings['principal'] as String,

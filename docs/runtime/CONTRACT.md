@@ -32,7 +32,7 @@ call ID so concurrent operations can complete out of order.
 ## Preview capability profile
 
 The first integration focus is chat drafts and their send boundary. All named
-categories are accepted for reporting, independently of model ratings. The service uses Gandalf by default and an exact email detector; the host owns warning and confirmation.
+categories are accepted for reporting, independently of model ratings. The service uses Gandalf by default and an exact email detector; the host displays advisory warnings without requiring confirmation.
 
 Named categories support `detected` and `score` rules without a category allowlist
 or model evaluation rating gate. Category identifiers are nonempty, at most 128
@@ -91,13 +91,16 @@ Error reply before an assessment handle exists.
 
 Results bind to request, message and revision. The host must additionally compare
 its immutable text, context and policy snapshot, invalidate after any edit, and
-keep confirmation specific to that snapshot. The Rust guard and SDK examples do
-this. The application owns encryption/send/display and accessible warnings.
+recheck at the send boundary. Complete, current `allow` and `warn` results may
+continue automatically. Warnings never require confirmation. The legacy policy
+`override` field and Rust guard confirmation argument remain accepted for compatibility
+but do not gate advisory warnings. The Rust guard and SDK examples implement this.
+The application owns encryption/send/display and accessible warnings.
 Installing this provider cannot compel an application to participate or obey.
 `cargo run --locked --example runtime_chat` is an offline reference chat; it
 uses every applicable preset by default, accepts optional subset/custom/context
 flags or a policy JSON path, and prints model scores and unevaluated rules,
-requires explicit continuation for warnings, and holds incomplete assessments.
+continues automatically after advisory warnings, and holds incomplete assessments.
 
 ## Compatibility and acceptance mapping
 
@@ -105,7 +108,7 @@ requires explicit continuation for warnings, and holds incomplete assessments.
 require an explicit negotiated schema revision before providers emit them.
 Changing enum meanings, required fields, reference scope or ABI ownership is a
 breaking revision. Clients reject incompatible API/ABI versions and malformed
-responses. Separate API 0.1 from C ABI integer 1 and runtime package 0.1.2.
+responses. Separate API 0.1 from C ABI integer 1 and runtime package 0.1.3.
 
 | Specification scenario | Evidence |
 | --- | --- |

@@ -12,8 +12,8 @@ try {
  for (const finding of result.findings) if (finding.score !== null) console.log(`Category ${finding.category}: score ${finding.score}`);
  if (result.coverage.unevaluated_rules.length) console.log(`Unevaluated rules: ${result.coverage.unevaluated_rules.join(', ')} (${result.reason_codes.join(', ')})`);
  if (!result.appliesTo(current)) throw new Error('stale revision');
- let permitted=result.action === 'allow';
- if (result.action === 'warn' && policy.override === 'user_confirm') permitted=await input.question('This chat message matched your policy. Type send to continue: ') === 'send';
+ const permitted=result.status === 'assessed' && ['allow','warn'].includes(result.action);
+ if (result.action === 'warn') console.log('Warning: this chat message matched your policy.');
  console.log(permitted && result.appliesTo(current) ? 'Message accepted by the local reference chat.' : 'Message held. Edit or retry.');
 } catch(error) { console.log(`Message held: ${error.code ?? 'INTERNAL_ERROR'}. Edit or retry.`); }
 finally {client.close();input.close();}

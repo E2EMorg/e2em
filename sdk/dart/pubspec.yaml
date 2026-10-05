@@ -1,5 +1,5 @@
 name: e2em_local
-version: 0.1.2
+version: 0.1.3
 description: Local E2EM chat message assessment client for Dart and Flutter desktop.
 homepage: https://e2em.org
 repository: https://github.com/E2EMorg/e2em/tree/main/sdk/dart

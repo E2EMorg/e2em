@@ -5,10 +5,9 @@ The SDK connects to the installed runtime using authenticated Unix sockets or
 Windows named pipes. It has no inference dependencies. Mobile and web are not
 supported in this preview.
 
-Requires Dart 3.5+. Install and enrol the runtime first using the
-[setup guide](../../docs/INSTALL.md). For Daccord, open
-`e2emd --setup --setup-app daccord` (or `e2em-setup.exe --setup-app daccord` on
-Windows), then approve **Connect app** in the setup screen.
+Requires Dart 3.5+. Complete one-time runtime setup using the
+[setup guide](../../docs/INSTALL.md). Apps such as Daccord connect automatically
+on first use, without a permission prompt or **Connect app** approval.
 
 Add a dependency from your application to a checkout:
 
@@ -19,7 +18,7 @@ dependencies:
 ```
 
 Or use a tagged Git dependency with `path: sdk/dart`, or extract the
-`e2em-dart-sdk-0.1.2.tar.gz` release archive and point a path dependency at the
+`e2em-dart-sdk-0.1.3.tar.gz` release archive and point a path dependency at the
 extracted directory. Publication to pub.dev is not enabled.
 
 ```dart
@@ -60,7 +59,8 @@ try {
 ```
 
 `Client.connect` and `assess` read installer-managed private settings for `app`
-(`my-app` by default). `configPath` selects explicitly provisioned settings.
+(`my-app` by default), registering new apps automatically with the installed runtime.
+`configPath` selects explicitly provisioned settings.
 Unix loaders reject symlinks, wrong ownership, and group/other permissions.
 Windows settings inherit installer-managed ACL protection; pipe names are
 restricted to local `\\.\pipe\e2em-*` endpoints. Both transports verify the
@@ -85,9 +85,9 @@ also fails pending work and disposes transport resources.
 
 Reports and `report.request` are immutable. Before sending, call
 `report.appliesTo(currentRequest)` with your **current** message, context, policy,
-and revision. An edit invalidates the result. Repeat this check after warning
-confirmation. `allow` may proceed; `warn` requires explicit policy-permitted
-confirmation. Hold `review`, errors, cancellations, stale results, and incomplete
+and revision. An edit invalidates the result. Recheck at the send boundary.
+Complete `allow` and `warn` results may proceed automatically; warnings are advisory
+and require no confirmation. Hold `review`, errors, cancellations, stale results, and incomplete
 coverage. The [send-flow example](example/send_flow.dart) illustrates this guard.
 
 `report.scores` includes every reported finite score; `report.unevaluated` maps

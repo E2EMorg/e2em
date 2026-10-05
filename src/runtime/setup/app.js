@@ -1,8 +1,7 @@
 const $ = id => document.getElementById(id);
-let stage = 'welcome', preferencesLoaded = false, closed = false;
+let stage = 'welcome', preferencesLoaded = false, closed = false, appConnected = false;
 const busyStages = ['configuring', 'model', 'starting', 'checking'];
 const requestedApp = new URLSearchParams(location.search).get('app');
-if (requestedApp && /^[A-Za-z0-9_-]{1,64}$/.test(requestedApp)) $('principal').value = requestedApp;
 async function post(path, body) {
   const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   const text = await response.text();
@@ -39,6 +38,13 @@ async function poll() {
     const response = await fetch('status');
     if (!response.ok) throw new Error('Setup status is unavailable.');
     render(await response.json());
+    if (stage === 'ready' && !appConnected && requestedApp && /^[A-Za-z0-9_-]{1,64}$/.test(requestedApp)) {
+      try {
+        const result = await post('enrol', {principal:requestedApp});
+        $('app-message').textContent = result.message;
+        appConnected = true;
+      } catch (error) { $('app-message').textContent = error.message; }
+    }
   } catch {
     $('message').textContent = 'The setup connection closed. Reopen E2EM Setup to check progress or continue. Completed steps are kept.';
     $('start').disabled = true;
@@ -53,15 +59,6 @@ $('setup-form').addEventListener('submit', async event => {
     await post('start', {offline:$('offline').checked, auto_update:$('updates').checked && !$('offline').checked, start_at_login:$('login').checked});
     render({stage:'configuring', message:'Preparing your private runtime…'});
   } catch (error) { render({stage:'error', message:error.message}); }
-});
-$('app-form').addEventListener('submit', async event => {
-  event.preventDefault();
-  const button = event.target.querySelector('button'); button.disabled = true;
-  try {
-    const result = await post('enrol', {principal:$('principal').value});
-    $('app-message').textContent = result.message;
-  } catch (error) { $('app-message').textContent = error.message; }
-  finally { button.disabled = false; }
 });
 $('done').addEventListener('click', async () => {
   try { await post('close', {}); closed = true; $('done').disabled = true; $('done').textContent = 'All done'; $('message').textContent = 'E2EM keeps running in the background. You can close this tab.'; }

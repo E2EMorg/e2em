@@ -34,16 +34,47 @@ void checkSocket(String socketPath) {
   if (!parent.mode.isDirectory || !socket.mode.isSocket) throw 0;
 }
 
+String _settingsPath(String app) => Platform.isWindows
+    ? path.join(Platform.environment['LOCALAPPDATA']!, 'E2EM', 'app-$app.json')
+    : path.join(
+        Platform.environment['HOME']!, '.config', 'e2em', 'apps', '$app.json');
+
+Future<Json> automaticConnection(String app, String? configPath) async {
+  try {
+    checkDesktop();
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(app)) throw 0;
+    if (configPath == null &&
+        FileSystemEntity.typeSync(_settingsPath(app), followLinks: false) ==
+            FileSystemEntityType.notFound) {
+      final installed = Platform.isWindows
+          ? path.join(Platform.environment['LOCALAPPDATA']!, 'E2EM Runtime',
+              'e2emd.exe')
+          : '/usr/local/libexec/e2em/e2emd';
+      final binary = File(installed).existsSync() ? installed : 'e2emd';
+      final process = await Process.start(binary, ['--connect-app', app]);
+      final output = process.stdout.drain<void>();
+      final errors = process.stderr.drain<void>();
+      try {
+        final code =
+            await process.exitCode.timeout(const Duration(seconds: 10));
+        if (code != 0) throw 0;
+        await Future.wait([output, errors]);
+      } finally {
+        process.kill();
+      }
+    }
+    return connection(app, configPath);
+  } catch (error, stack) {
+    diagnose('connect app', error, stack);
+    throw const E2EMError('MODEL_UNAVAILABLE');
+  }
+}
+
 Json connection(String app, String? configPath) {
   try {
     checkDesktop();
     if (!RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(app)) throw 0;
-    final config = configPath ??
-        (Platform.isWindows
-            ? path.join(
-                Platform.environment['LOCALAPPDATA']!, 'E2EM', 'app-$app.json')
-            : path.join(Platform.environment['HOME']!, '.config', 'e2em',
-                'apps', '$app.json'));
+    final config = configPath ?? _settingsPath(app);
     List<int> bytes;
     if (Platform.isWindows) {
       final file = File(config);

@@ -46,7 +46,7 @@ def fetch(url, path, limit):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--runtime-version", default="0.1.2")
+    parser.add_argument("--runtime-version", default="0.1.3")
     parser.add_argument("--snapshot", type=Path)
     parser.add_argument("--onnx", type=Path, help="reuse an export already checked with probe_gandalf.py")
     parser.add_argument("--signing-key", type=Path)

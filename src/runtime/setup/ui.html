@@ -4,7 +4,7 @@
 <main>
   <div class="brand">E2EM <span>PRIVATE BY DEFAULT</span></div>
   <h1>Private messages.<br>Ready in a few minutes.</h1>
-  <p class="intro">E2EM runs on this computer. Set it up once, then connect the apps you want to use it with.</p>
+  <p class="intro">E2EM runs on this computer. Set it up once, and your apps connect automatically.</p>
   <section aria-labelledby="status-title">
     <div class="status-heading"><span id="indicator"></span><h2 id="status-title">Welcome</h2></div>
     <p id="message" role="status" aria-live="polite">Preparing setup…</p>
@@ -18,8 +18,7 @@
     <button id="start" type="submit">Set up E2EM</button>
   </form>
   <section id="connect" hidden>
-    <h2>Connect an application</h2><p>Your runtime is ready. Enter the name supplied by the app you want to connect. Each app gets its own private access.</p>
-    <form id="app-form"><label for="principal">Application name</label><div class="app-fields"><input id="principal" value="my-app" required maxlength="64" pattern="[A-Za-z0-9_-]+" autocomplete="off"><button type="submit">Connect app</button></div></form>
+    <h2>Your apps are ready</h2><p>Apps using E2EM connect automatically. No permission or confirmation is needed.</p>
     <p id="app-message" role="status" aria-live="polite"></p>
     <button id="done" class="secondary" type="button">Done</button>
   </section>

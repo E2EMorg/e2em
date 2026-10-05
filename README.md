@@ -24,7 +24,7 @@ This repository contains the **runtime, SDKs, installers, and integration contra
 
 ### Assess a message
 
-After [one-time runtime and app setup](docs/INSTALL.md), the Python SDK loads its local connection settings automatically:
+After [one-time runtime setup](docs/INSTALL.md), the Python SDK connects your app and loads its local settings automatically, without asking permission:
 
 ```python
 from e2em import assess
@@ -67,7 +67,7 @@ Enter a message such as `See you at 6!`. The demo uses every applicable built-in
 | Linux · Ubuntu / Debian, 64-bit | `x86_64-unknown-linux-musl.deb` | [Debian / Ubuntu setup](docs/INSTALL.md#linux) |
 | Linux · Fedora / RPM, 64-bit | `x86_64-unknown-linux-musl.rpm` | [Fedora setup](docs/INSTALL.md#linux) |
 
-Open **E2EM Setup** after installation and choose **Set up E2EM**. The same screen on every platform installs Gandalf, starts the runtime in the background, enables startup at login, and checks a local assessment before showing **Ready**. No terminal commands or Python installation are needed. Connect your app from the Ready screen. Offline and update preferences are available in setup.
+Open **E2EM Setup** after installation and choose **Set up E2EM**. The same screen on every platform installs Gandalf, starts the runtime in the background, enables startup at login, and checks a local assessment before showing **Ready**. No terminal commands or Python installation are needed. Apps connect automatically with no approval step. Offline and update preferences are available in setup.
 
 > Installers are unsigned; Windows/macOS may require permission to open them. E2EM works inside apps that integrate it. Native inference and installer reports accompany each release. The developing standard does not claim per-category model qualification.
 
@@ -94,7 +94,7 @@ flowchart LR
     G --> D
 ```
 
-The shared service uses Unix sockets on Linux/macOS and a local named pipe on Windows. Embedded integrations run in the host process. The SDK loads the local settings created during app enrolment. This authenticates apps sharing the service; it is not a user account or cloud API key. Embedded Rust/C use needs no service credentials.
+The shared service uses Unix sockets on Linux/macOS and a local named pipe on Windows. Embedded integrations run in the host process. The SDK automatically registers the app and loads its local settings. This authenticates apps sharing the service; it is not a user account or cloud API key. Embedded Rust/C use needs no service credentials.
 
 Managed setup enables [background runtime updates](docs/runtime/UPDATING.md). Update checks and downloads wait for an idle runtime; restart waits for assessments and replies to finish. Updates preserve credentials and keep the previous working version for rollback. Setup offers an opt-out for offline installations.
 
@@ -113,11 +113,11 @@ SDK packages are attached to the same [versioned GitHub Releases](https://github
 For downloaded Python wheels and Node archives:
 
 ```sh
-python3 -m pip install ./e2em_local-0.1.2-py3-none-any.whl
-npm install ./e2em-local-0.1.2.tgz
+python3 -m pip install ./e2em_local-0.1.3-py3-none-any.whl
+npm install ./e2em-local-0.1.3.tgz
 ```
 
-Dart/Rust SDK source and native C ABI archives are also included. Python/Node/Dart SDKs connect to an installed and enrolled runtime; installing an SDK alone does not start one. Dart mobile and web support are outside this preview.
+Dart/Rust SDK source and native C ABI archives are also included. Python/Node/Dart SDKs connect automatically to a configured runtime; installing an SDK alone does not start one. Dart mobile and web support are outside this preview.
 
 ### Handle the result
 
@@ -129,14 +129,12 @@ flowchart TD
     D --> B
     C -->|Yes| E{Action}
     E -->|allow| F[Proceed with the current draft]
-    E -->|warn| G[Show warning and ask the user]
-    G --> H{Still current and user confirms?}
-    H -->|Yes| F
-    H -->|No| I[Keep draft for editing]
-    E -->|review or error| I
+    E -->|warn| G[Show advisory warning]
+    G --> F
+    E -->|review or error| I[Keep draft for editing]
 ```
 
-The app must recheck the current snapshot at the actual send boundary, including after warning confirmation. A timeout, unavailable runtime, cancellation, malformed response, or incomplete coverage must hold the action for review. Named categories are not rejected because of model ratings or an allowlist. Unavailable checks are reported as unevaluated; the current preview does not support block policies or platform authority.
+The app must recheck the current snapshot at the actual send boundary. Complete `allow` and `warn` results proceed without confirmation; warnings are advisory. A timeout, unavailable runtime, cancellation, malformed response, or incomplete coverage must hold the action for review. Named categories are not rejected because of model ratings or an allowlist. Unavailable checks are reported as unevaluated; the current preview does not support block policies or platform authority.
 
 ### Current capabilities
 
