@@ -152,7 +152,11 @@ class Service(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(defaults.status, "indeterminate")
 
     async def test_first_use_registers_sdk_apps_without_interaction(self):
-        home = self.directory / "home"
+        # macOS' default temporary directory is too long for the extra home/
+        # Library/Caches layout within its 104-byte Unix socket path limit.
+        temporary = tempfile.TemporaryDirectory(prefix="e2em-app-", dir="/tmp" if sys.platform == "darwin" else self.directory)
+        self.addCleanup(temporary.cleanup)
+        home = Path(temporary.name)
         root = home / ".config/e2em"
         root.mkdir(parents=True, mode=0o700)
         runtime = home / "Library/Caches/e2em" if sys.platform == "darwin" else home / "run/e2em"
